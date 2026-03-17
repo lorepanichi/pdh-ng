@@ -247,3 +247,21 @@ class TestIncidentsScreenStatePrefs:
                 screen.on_unmount()
             assert app._prefs.get("status_mode") == "acknowledged"
             assert app._prefs_saved is not None
+
+    async def test_apply_column_selection_uses_scope(self):
+        """Regression: _apply_column_selection must pass _scope, not the removed _mine_only."""
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp(prefs={"scope": "all"}).run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incidents_cache = {}
+                # Should not raise AttributeError for _mine_only
+                screen._apply_column_selection(["title", "status"])
+                assert screen._visible_columns == ["title", "status"]
+
+    async def test_apply_column_selection_none_is_noop(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                original = screen._visible_columns[:]
+                screen._apply_column_selection(None)
+                assert screen._visible_columns == original

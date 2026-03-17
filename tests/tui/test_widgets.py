@@ -281,3 +281,19 @@ class TestFieldSelectorScreen:
         assert pilot.app.result is not None
         assert "id" in pilot.app.result
         assert "title" in pilot.app.result
+
+    async def test_confirm_preserves_all_columns_order(self):
+        """Regression: re-enabling a column must not move it to the end."""
+        async with ModalApp(FieldSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
+            await pilot.press("ctrl+s")
+            await pilot.pause()
+        assert pilot.app.result == ALL_COLUMNS
+
+    async def test_confirm_subset_preserves_order(self):
+        subset = ["title", "status", "age"]  # non-contiguous slice of ALL_COLUMNS
+        async with ModalApp(FieldSelectorScreen(subset)).run_test() as pilot:
+            await pilot.press("ctrl+s")
+            await pilot.pause()
+        result = pilot.app.result
+        assert result is not None
+        assert result == [c for c in ALL_COLUMNS if c in set(subset)]

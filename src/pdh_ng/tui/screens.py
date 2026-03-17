@@ -287,7 +287,7 @@ class IncidentsScreen(Screen):
         self._rebuild_columns()
         self._populate_table(
             list(self._incidents_cache.values()),
-            self._mine_only,
+            self._scope,
             self._title_filter,
         )
 

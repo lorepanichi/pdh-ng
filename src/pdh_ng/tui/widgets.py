@@ -12,19 +12,25 @@ ALL_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
 DEFAULT_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
 
 _STATUS_CYCLE = ["all", STATUS_TRIGGERED, STATUS_ACK]
-_STATUS_LABELS = {"all": "2:all statuses", STATUS_TRIGGERED: "2:triggered", STATUS_ACK: "2:ack'd"}
+_STATUS_LABELS = {
+    "all": "2:all statuses",
+    STATUS_TRIGGERED: "2:triggered   ",
+    STATUS_ACK: "2:acknowledged",
+}
 _STATUS_VARIANTS = {"all": "default", STATUS_TRIGGERED: "error", STATUS_ACK: "warning"}
 
 _SCOPE_CYCLE = ["mine", "team", "all"]
-_SCOPE_LABELS = {"mine": "1:mine", "team": "1:team", "all": "1:all"}
+_SCOPE_LABELS = {"mine": "1:mine", "team": "1:team", "all": "1:all "}
 
 _REFRESH_CYCLE = [0, 3, 5, 10]
-_REFRESH_LABELS = {0: "3:↻ off", 3: "3:↻  3s", 5: "3:↻  5s", 10: "3:↻ 10s"}
+_REFRESH_LABELS = {0: "3:↻ off", 3: "3:↻ 3s ", 5: "3:↻ 5s ", 10: "3:↻ 10s"}
 
 
 class StatusBar(Horizontal):
     class FiltersChanged(Message):
-        def __init__(self, statuses: list[str], urgencies: list[str], scope: str, status_mode: str) -> None:
+        def __init__(
+            self, statuses: list[str], urgencies: list[str], scope: str, status_mode: str
+        ) -> None:
             super().__init__()
             self.statuses = statuses
             self.urgencies = urgencies
@@ -36,7 +42,9 @@ class StatusBar(Horizontal):
             super().__init__()
             self.interval = interval
 
-    def __init__(self, scope: str = "mine", refresh_interval: int = 5, status_mode: str = "all", **kwargs) -> None:
+    def __init__(
+        self, scope: str = "mine", refresh_interval: int = 5, status_mode: str = "all", **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         self._scope: str = scope
         self._status_mode: str = status_mode
@@ -149,7 +157,8 @@ class FieldSelectorScreen(ModalScreen):
         self.dismiss(None)
 
     def action_confirm(self) -> None:
-        selected = list(self.query_one("#field-selector-list", SelectionList).selected)
+        selected_set = set(self.query_one("#field-selector-list", SelectionList).selected)
+        selected = [col for col in ALL_COLUMNS if col in selected_set]
         self.dismiss(selected if selected else None)
 
 
