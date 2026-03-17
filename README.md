@@ -4,7 +4,7 @@ A PagerDuty terminal UI for humans. Manage incidents interactively without leavi
 
 ## Requirements
 
-- Python >= 3.11
+- Python >= 3.12
 - [uv](https://docs.astral.sh/uv/)
 
 ## Install
