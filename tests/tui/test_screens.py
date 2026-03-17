@@ -58,11 +58,11 @@ class TestUrgencyMarker:
 
     def test_missing_urgency(self):
         result = _urgency_marker({})
-        assert result == ""
+        assert result == " "
 
     def test_unknown_urgency(self):
         result = _urgency_marker({"urgency": "unknown"})
-        assert result == ""
+        assert result == " "
 
 
 class TestApplyTitleFilter:

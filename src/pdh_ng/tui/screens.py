@@ -58,7 +58,12 @@ def _urgency_marker(inc: dict) -> str:
         return "[bold red]▋[/bold red]"
     if urgency == "low":
         return "[bold blue]▋[/bold blue]"
-    return ""
+    return " "
+
+
+def _row_marker(inc: dict, selected: bool) -> str:
+    sel = "[bold green]✓[/bold green]" if selected else " "
+    return _urgency_marker(inc) + sel
 
 
 def _cell_value(inc: dict, col: str) -> str:
@@ -117,8 +122,16 @@ class IncidentsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield DataTable(id="incidents-table", cursor_type="row", zebra_stripes=True)
-        yield Input(placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel", id="title-filter")
+        yield DataTable(
+            id="incidents-table",
+            cursor_type="row",
+            zebra_stripes=True,
+            cursor_foreground_priority="renderable",
+        )
+        yield Input(
+            placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel",
+            id="title-filter",
+        )
         yield StatusBar(scope=self._scope, id="status-bar")
         yield Footer()
 
@@ -165,7 +178,8 @@ class IncidentsScreen(Screen):
     def _rebuild_columns(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         table.clear(columns=True)
-        table.add_columns("", *self._visible_columns)
+        table.add_column("", width=2)
+        table.add_columns(*self._visible_columns)
 
     @on(StatusBar.FiltersChanged)
     def _on_filters_changed(self, event: StatusBar.FiltersChanged) -> None:
@@ -219,18 +233,37 @@ class IncidentsScreen(Screen):
 
     def _populate_table(self, incs: list, scope: str, title_filter: str) -> None:
         table = self.query_one("#incidents-table", DataTable)
+        cursor_row = table.cursor_row
+        cursor_id = (
+            self._incident_ids[cursor_row]
+            if 0 <= cursor_row < len(self._incident_ids)
+            else None
+        )
+
         table.clear(columns=True)
-        table.add_columns("", *self._visible_columns)
+        table.add_column("", width=2)
+        table.add_columns(*self._visible_columns)
         self._incident_ids = []
         self._incidents_cache = {}
-        self._selected_ids.clear()
 
         for inc in incs:
             inc_id = inc["id"]
             self._incident_ids.append(inc_id)
             self._incidents_cache[inc_id] = inc
             cells = [_cell_value(inc, col) for col in self._visible_columns]
-            table.add_row(_urgency_marker(inc), *cells, key=inc_id)
+            table.add_row(_row_marker(inc, False), *cells, key=inc_id)
+
+        self._selected_ids &= set(self._incident_ids)
+        for i, inc_id in enumerate(self._incident_ids):
+            if inc_id in self._selected_ids:
+                inc = self._incidents_cache[inc_id]
+                table.update_cell_at(Coordinate(i, 0), _row_marker(inc, True))
+
+        if cursor_id in self._incidents_cache:
+            try:
+                table.move_cursor(row=table.get_row_index(cursor_id), scroll=True)
+            except Exception:
+                pass
 
         self.query_one("#status-bar", StatusBar).set_count(len(incs), title_filter, scope)
         self._schedule_next_refresh()
@@ -253,13 +286,13 @@ class IncidentsScreen(Screen):
         row_idx = table.cursor_row
         if 0 <= row_idx < len(self._incident_ids):
             inc_id = self._incident_ids[row_idx]
+            inc = self._incidents_cache.get(inc_id, {})
             if inc_id in self._selected_ids:
                 self._selected_ids.discard(inc_id)
-                marker = _urgency_marker(self._incidents_cache.get(inc_id, {}))
-                table.update_cell_at(Coordinate(row_idx, 0), marker)
+                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, False))
             else:
                 self._selected_ids.add(inc_id)
-                table.update_cell_at(Coordinate(row_idx, 0), "[bold green]✓[/bold green]")
+                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, True))
 
     def action_clear_or_hide_filter(self) -> None:
         filter_input = self.query_one("#title-filter", Input)
@@ -271,8 +304,8 @@ class IncidentsScreen(Screen):
             self._selected_ids.clear()
             table = self.query_one("#incidents-table", DataTable)
             for i, inc_id in enumerate(self._incident_ids):
-                marker = _urgency_marker(self._incidents_cache.get(inc_id, {}))
-                table.update_cell_at(Coordinate(i, 0), marker)
+                inc = self._incidents_cache.get(inc_id, {})
+                table.update_cell_at(Coordinate(i, 0), _row_marker(inc, False))
 
     def action_toggle_filter(self) -> None:
         filter_input = self.query_one("#title-filter", Input)

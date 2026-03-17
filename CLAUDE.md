@@ -66,7 +66,13 @@ All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from wor
 `DataTable.add_row()` renders Rich markup automatically. `DataTable.update_cell_at()` does NOT — wrap values with `Text.from_markup()` from `rich.text`.
 
 ### Urgency indicator
-Urgency is shown as a coloured `▋` in the first (marker) column instead of a separate urgency column. `▋` red = high, blue = low. Turns to a bright-coloured `✓` on selection (colour preserved). "urgency" is excluded from `ALL_COLUMNS`.
+The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, selected)`:
+- Always shows urgency `▋` (red = high, blue = low, space = none) plus selection `✓` (green) or space side by side — e.g. `▋✓` or `▋ `.
+- `_urgency_marker` returns `" "` (space) for unknown/missing urgency so the cell never collapses.
+- "urgency" is excluded from `ALL_COLUMNS`.
+
+### Cursor and selection persistence
+`_populate_table` snapshots `cursor_id` (the incident ID at the current cursor row) before clearing the table, then restores via `table.get_row_index(cursor_id)` + `table.move_cursor()` after repopulating. `_selected_ids` is reconciled with the new dataset (`&=` set intersection) rather than cleared, and surviving selections have their marker cells repainted.
 
 ### Status bar
 `StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains three cycling buttons:

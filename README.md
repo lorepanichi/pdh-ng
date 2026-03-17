@@ -1,6 +1,6 @@
 # PDH New Generation
 
-A PagerDuty terminal UI. Manage incidents interactively without leaving the terminal.
+A PagerDuty terminal UI built with [Textual](https://github.com/Textualize/textual). Manage incidents interactively without leaving the terminal.
 
 ## Requirements
 
@@ -67,14 +67,14 @@ pdh-ng
 |-----|--------|
 | `1` | Cycle scope: mine → team → all |
 | `2` | Cycle status filter: all → triggered → acknowledged |
+| `3` | Cycle refresh time: 5s → 10s → off → 3s |
 | `a` | Acknowledge selected incident(s) |
 | `r` | Resolve selected incident(s) |
 | `s` | Snooze selected incident(s) |
 | `space` | Select/deselect incident |
+| `escape` | Clear incidents selection |
 | `f` | Toggle title filter (prefix with `!` to exclude) |
 | `c` | Select visible columns |
-| `enter` | Open incident detail |
-| `ctrl+r` | Reload |
 | `q` | Quit |
 
 ## UI preferences
