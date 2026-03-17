@@ -10,7 +10,7 @@ urls = {"Source" = "https://github.com/lorepanichi/pdh-ng"}
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "rich>=13.9.4,<14.0.0",
+    "rich>=13.9.4,<15.0.0",
     "pyyaml>=6.0.2,<7.0.0",
     "humanize>=4.10.0,<5.0.0",
     "pagerduty>=4.0.1,<5.0.0",
