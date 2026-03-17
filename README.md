@@ -71,7 +71,7 @@ pdh-ng
 | `r` | Resolve selected incident(s) |
 | `s` | Snooze selected incident(s) |
 | `space` | Select/deselect incident |
-| `f` | Toggle title filter |
+| `f` | Toggle title filter (prefix with `!` to exclude) |
 | `c` | Select visible columns |
 | `enter` | Open incident detail |
 | `ctrl+r` | Reload |

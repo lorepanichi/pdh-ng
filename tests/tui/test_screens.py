@@ -2,8 +2,16 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from textual.app import App, ComposeResult
+from textual.widgets import Input
 
-from pdh_ng.tui.screens import IncidentsScreen, _cell_value, _colored, _fmt_age, _urgency_marker
+from pdh_ng.tui.screens import (
+    IncidentsScreen,
+    _apply_title_filter,
+    _cell_value,
+    _colored,
+    _fmt_age,
+    _urgency_marker,
+)
 from pdh_ng.tui.widgets import DEFAULT_COLUMNS, StatusBar
 
 
@@ -55,6 +63,47 @@ class TestUrgencyMarker:
     def test_unknown_urgency(self):
         result = _urgency_marker({"urgency": "unknown"})
         assert result == ""
+
+
+class TestApplyTitleFilter:
+    _incs = [
+        {"title": "CPU spike on web-01"},
+        {"title": "Memory leak in worker"},
+        {"title": "Disk full on db-02"},
+    ]
+
+    def test_empty_filter_returns_all(self):
+        assert _apply_title_filter(self._incs, "") == self._incs
+
+    def test_positive_filter_matches_substring(self):
+        result = _apply_title_filter(self._incs, "cpu")
+        assert len(result) == 1
+        assert result[0]["title"] == "CPU spike on web-01"
+
+    def test_positive_filter_case_insensitive(self):
+        result = _apply_title_filter(self._incs, "CPU")
+        assert len(result) == 1
+
+    def test_positive_filter_no_match(self):
+        assert _apply_title_filter(self._incs, "network") == []
+
+    def test_negative_filter_excludes_match(self):
+        result = _apply_title_filter(self._incs, "!cpu")
+        titles = [i["title"] for i in result]
+        assert "CPU spike on web-01" not in titles
+        assert len(result) == 2
+
+    def test_negative_filter_case_insensitive(self):
+        result = _apply_title_filter(self._incs, "!CPU")
+        assert len(result) == 2
+
+    def test_negative_filter_no_match_returns_all(self):
+        result = _apply_title_filter(self._incs, "!network")
+        assert result == self._incs
+
+    def test_bang_only_excludes_all(self):
+        result = _apply_title_filter(self._incs, "!")
+        assert result == []
 
 
 class TestCellValue:
@@ -265,3 +314,101 @@ class TestIncidentsScreenStatePrefs:
                 original = screen._visible_columns[:]
                 screen._apply_column_selection(None)
                 assert screen._visible_columns == original
+
+
+class TestIncidentsScreenFilter:
+    async def test_enter_sets_filter_and_hides_input(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen.action_toggle_filter()
+                await pilot.pause()
+                filter_input = pilot.app.query_one("#title-filter", Input)
+                filter_input.value = "cpu spike"
+                await pilot.pause()
+
+                screen._on_title_filter_submitted(Input.Submitted(filter_input, "cpu spike"))
+                await pilot.pause()
+
+                assert not filter_input.display
+                assert screen._title_filter == "cpu spike"
+
+    async def test_enter_triggers_load(self):
+        with patch.object(IncidentsScreen, "load_incidents") as mock_load:
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen.action_toggle_filter()
+                await pilot.pause()
+                filter_input = pilot.app.query_one("#title-filter", Input)
+                mock_load.reset_mock()
+
+                screen._on_title_filter_submitted(Input.Submitted(filter_input, "test"))
+                await pilot.pause()
+
+                mock_load.assert_called_once()
+
+    async def test_escape_hides_without_clearing_filter(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._title_filter = "cpu spike"
+                screen.action_toggle_filter()
+                await pilot.pause()
+                filter_input = pilot.app.query_one("#title-filter")
+
+                screen.action_clear_or_hide_filter()
+                await pilot.pause()
+
+                assert not filter_input.display
+                assert screen._title_filter == "cpu spike"
+
+    async def test_escape_does_not_trigger_load(self):
+        with patch.object(IncidentsScreen, "load_incidents") as mock_load:
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen.action_toggle_filter()
+                await pilot.pause()
+                mock_load.reset_mock()
+
+                screen.action_clear_or_hide_filter()
+                await pilot.pause()
+
+                mock_load.assert_not_called()
+
+    async def test_toggle_open_prepopulates_current_filter(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._title_filter = "cpu spike"
+
+                screen.action_toggle_filter()
+                await pilot.pause()
+
+                filter_input = pilot.app.query_one("#title-filter", Input)
+                assert filter_input.display
+                assert filter_input.value == "cpu spike"
+
+    async def test_toggle_hide_preserves_filter_value(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._title_filter = "cpu spike"
+                screen.action_toggle_filter()
+                await pilot.pause()
+
+                screen.action_toggle_filter()
+                await pilot.pause()
+
+                assert not pilot.app.query_one("#title-filter").display
+                assert screen._title_filter == "cpu spike"
+
+    async def test_filter_persists_through_refresh(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._title_filter = "cpu spike"
+
+                screen._on_refresh_timer()
+                await pilot.pause()
+
+                assert screen._title_filter == "cpu spike"

@@ -22,7 +22,9 @@ from pdh_ng.pd import (
 @pytest.fixture
 def cfg():
     c = Config()
-    c.from_dict({"apikey": "test-key", "uid": "U123", "email": "test@example.com"})
+    c["apikey"] = "test-key"
+    c["uid"] = "U123"
+    c["email"] = "test@example.com"
     return c
 
 

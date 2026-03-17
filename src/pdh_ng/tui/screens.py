@@ -43,6 +43,15 @@ def _colored(text: str, color: str) -> str:
     return f"[{color}]{text}[/{color}]"
 
 
+def _apply_title_filter(incs: list[dict], title_filter: str) -> list[dict]:
+    if not title_filter:
+        return incs
+    if title_filter.startswith("!"):
+        term = title_filter[1:].lower()
+        return [i for i in incs if term not in i.get("title", "").lower()]
+    return [i for i in incs if title_filter.lower() in i.get("title", "").lower()]
+
+
 def _urgency_marker(inc: dict) -> str:
     urgency = inc.get("urgency", "")
     if urgency == "high":
@@ -109,7 +118,7 @@ class IncidentsScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield DataTable(id="incidents-table", cursor_type="row", zebra_stripes=True)
-        yield Input(placeholder="filter title... (esc to close)", id="title-filter")
+        yield Input(placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel", id="title-filter")
         yield StatusBar(scope=self._scope, id="status-bar")
         yield Footer()
 
@@ -166,10 +175,12 @@ class IncidentsScreen(Screen):
         self._status_mode = event.status_mode
         self._schedule_next_refresh()
 
-    @on(Input.Changed, "#title-filter")
-    def _on_title_filter_changed(self, event: Input.Changed) -> None:
+    @on(Input.Submitted, "#title-filter")
+    def _on_title_filter_submitted(self, event: Input.Submitted) -> None:
         self._title_filter = event.value
-        self._schedule_next_refresh()
+        self.query_one("#title-filter", Input).display = False
+        self.query_one("#incidents-table").focus()
+        self.load_incidents()
 
     @work(exclusive=True, thread=True)
     def load_incidents(self) -> None:
@@ -193,8 +204,7 @@ class IncidentsScreen(Screen):
                 )
             else:
                 incs = list(pd_client.incidents.fetch(statuses=statuses, urgencies=urgencies))
-            if title_filter:
-                incs = [i for i in incs if title_filter.lower() in i.get("title", "").lower()]
+            incs = _apply_title_filter(incs, title_filter)
             self.app.call_from_thread(self._populate_table, incs, scope, title_filter)
         except Exception as e:
             logger.exception("Error loading incidents")
@@ -255,7 +265,7 @@ class IncidentsScreen(Screen):
         filter_input = self.query_one("#title-filter", Input)
         if filter_input.display:
             filter_input.display = False
-            filter_input.value = ""
+            self.query_one("#incidents-table").focus()
             return
         if self._selected_ids:
             self._selected_ids.clear()
@@ -268,9 +278,9 @@ class IncidentsScreen(Screen):
         filter_input = self.query_one("#title-filter", Input)
         filter_input.display = not filter_input.display
         if filter_input.display:
+            filter_input.value = self._title_filter
             filter_input.focus()
         else:
-            filter_input.value = ""
             self.query_one("#incidents-table").focus()
 
     def action_select_columns(self) -> None:
