@@ -24,23 +24,24 @@ _REFRESH_LABELS = {0: "3:↻ off", 3: "3:↻  3s", 5: "3:↻  5s", 10: "3:↻ 10
 
 class StatusBar(Horizontal):
     class FiltersChanged(Message):
-        def __init__(self, statuses: list[str], urgencies: list[str], scope: str) -> None:
+        def __init__(self, statuses: list[str], urgencies: list[str], scope: str, status_mode: str) -> None:
             super().__init__()
             self.statuses = statuses
             self.urgencies = urgencies
             self.scope = scope
+            self.status_mode = status_mode
 
     class RefreshIntervalChanged(Message):
         def __init__(self, interval: int) -> None:
             super().__init__()
             self.interval = interval
 
-    def __init__(self, scope: str = "mine", **kwargs) -> None:
+    def __init__(self, scope: str = "mine", refresh_interval: int = 5, status_mode: str = "all", **kwargs) -> None:
         super().__init__(**kwargs)
         self._scope: str = scope
-        self._status_mode: str = "all"
+        self._status_mode: str = status_mode
         self._urgencies: set[str] = set(DEFAULT_URGENCIES)
-        self._refresh_interval: int = 5
+        self._refresh_interval: int = refresh_interval
         self._count_text: str = ""
 
     def compose(self) -> ComposeResult:
@@ -120,6 +121,7 @@ class StatusBar(Horizontal):
                 statuses=self._active_statuses(),
                 urgencies=list(self._urgencies),
                 scope=self._scope,
+                status_mode=self._status_mode,
             )
         )
 

@@ -8,6 +8,13 @@ from rich import print
 
 REQUIRED_KEYS = ["apikey", "uid", "email"]
 
+DEFAULTS = {
+    "log_enabled": True,
+    "log_file": "~/.local/state/pdh-ng/logs/tui.log",
+    "log_level": "DEBUG",
+    "max_network_attempts": 5,
+}
+
 
 class Config:
     cfg = {}
@@ -68,6 +75,9 @@ class Config:
     def __str__(self) -> str:
         return repr(self.cfg)
 
+    def get(self, key: str, default=None):
+        return self.cfg.get(key, default)
+
     def __contains__(self, key) -> bool:
         return key in self.cfg
 
@@ -97,5 +107,9 @@ def load_and_validate(fileName: str) -> Config:
         vars = ", ".join(missing)
         print(f"[red]Missing config. Set via ~/.config/pdh-ng/config.yaml or env: {vars}[/red]")
         sys.exit(1)
+
+    for key, value in DEFAULTS.items():
+        if key not in config:
+            config[key] = value
 
     return config

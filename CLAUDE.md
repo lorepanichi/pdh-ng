@@ -7,7 +7,7 @@ PagerDuty TUI for humans. See @README for project overview and user-facing docs 
 ```
 src/pdh_ng/
 ├── pd.py             # PagerDuty API wrapper (PagerDuty, Incidents, Users, Services, Teams)
-├── config.py         # Config loading/validation — file + env var fallback
+├── config.py         # Config loading/validation — file + env var fallback + DEFAULTS
 ├── main.py           # Entry point — loads config and launches TuiApp
 └── tui/
     ├── app.py        # TuiApp(App) — holds cfg, UI prefs, logging setup
@@ -16,7 +16,12 @@ src/pdh_ng/
     └── styles.tcss   # Textual CSS
 
 tests/
-└── test_config.py
+├── test_config.py
+├── test_pd.py
+└── tui/
+    ├── test_app.py
+    ├── test_screens.py
+    └── test_widgets.py
 ```
 
 ## Running
@@ -33,6 +38,11 @@ uv run pdh-ng
 - Env vars `PDH_NG_APIKEY`, `PDH_NG_UID`, `PDH_NG_EMAIL` fill in any keys missing after file load
 - File takes precedence over env vars
 - Missing keys after both sources → print error + `sys.exit(1)`
+- Optional keys (with defaults, set in `DEFAULTS` dict after validation):
+  - `log_enabled: true`
+  - `log_file: ~/.local/state/pdh-ng/logs/tui.log`
+  - `log_level: DEBUG`
+  - `max_network_attempts: 5`
 
 ## Key architecture decisions
 
@@ -52,23 +62,43 @@ All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from wor
 Urgency is shown as a coloured `▋` in the first (marker) column instead of a separate urgency column. `▋` red = high, blue = low. Turns to a bright-coloured `✓` on selection (colour preserved). "urgency" is excluded from `ALL_COLUMNS`.
 
 ### Status bar
-`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains two cycling buttons:
+`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains three cycling buttons:
 - `1` / click: cycles scope `mine → team → all`
 - `2` / click: cycles status filter `all statuses → triggered → ack'd`
+- `3` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
+
+The count label shows `N incident(s)` and appends `↻` while a refresh is in progress (preserving the last count).
+
+`FiltersChanged` message carries `statuses`, `urgencies`, `scope`, and `status_mode`.
 
 ### Scope modes
 - `mine`: `pd.incidents.mine()`
 - `team`: `pd.users.get(cfg["uid"])` → extract team IDs → `pd.incidents.fetch(teams=[...])`
 - `all`: `pd.incidents.fetch()`
 
+### Auto-refresh
+`IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s. Changing filters resets the timer but does not trigger an immediate reload. Timer is managed via `_schedule_next_refresh()` called at the end of `_populate_table` and `_set_error`.
+
 ### Persistent UI prefs
-`TuiApp.visible_columns` property reads/writes `~/.local/state/pdh-ng/ui.yaml`. Any column not in `ALL_COLUMNS` is silently filtered out on load (handles migrations).
+`TuiApp` reads/writes `~/.local/state/pdh-ng/ui.yaml` (path constant: `_PREFS_PATH`). Stored keys:
+- `columns` — visible column list (filtered against `ALL_COLUMNS` on load)
+- `refresh_interval` — saved on every change
+- `scope` — saved on app exit (`IncidentsScreen.on_unmount`)
+- `status_mode` — saved on app exit (`IncidentsScreen.on_unmount`)
+
+`TuiApp` exposes: `visible_columns` (r/w property), `refresh_interval` (r/w property), `scope` (r/o property), `status_mode` (r/o property).
 
 ### Logging
-Single log file at `~/.local/state/pdh-ng/logs/tui.log`. Directory is created on startup if missing.
+Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config keys `log_enabled`, `log_file`, `log_level`. If disabled, adds `NullHandler` to suppress output.
 
 ### Caching
 `Users` and `Teams` methods use `@lru_cache()` with a `ttl_hash(seconds=30)` argument to expire every 30s. `Incidents` is never cached — always fetches live.
+
+### Screen compose vs on_mount
+Do NOT access `self.app` inside `IncidentsScreen.compose()` — the screen may be embedded as a widget in tests before the app reference is fully wired. Read all prefs in `on_mount()` instead.
+
+### on_unmount caveat
+In `on_unmount`, children are already removed — `query_one` will raise `NoMatches`. Track mutable state as screen fields (`self._scope`, `self._status_mode`) updated via event handlers, and save those directly in `on_unmount`.
 
 ## Textual version
 
@@ -77,6 +107,7 @@ Currently running **Textual 6.x**. Key API notes:
 - `Button(compact=True, flat=True)` for inline status bar buttons
 - `ModalScreen.dismiss(value)` passes value to the `push_screen` callback
 - Bindings use `Binding(key, action, description, show=False)` to hide from footer
+- `set_timer(interval, cb)` fires once after `interval` seconds (one-shot); `set_interval` is repeating
 
 ## Dependencies
 

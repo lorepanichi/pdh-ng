@@ -80,6 +80,36 @@ class TestPrefsIO:
         assert app.visible_columns == ["id", "title", "status"]
 
 
+class TestStatusModePrefs:
+    def test_scope_defaults_to_mine(self, app):
+        assert app.scope == "mine"
+
+    def test_scope_loads_from_prefs(self, app, tmp_path):
+        (tmp_path / "ui.yaml").write_text(yaml.dump({"scope": "team"}))
+        app._prefs = app._load_prefs()
+        assert app.scope == "team"
+
+    def test_status_mode_defaults_to_all(self, app):
+        assert app.status_mode == "all"
+
+    def test_status_mode_loads_from_prefs(self, app, tmp_path):
+        (tmp_path / "ui.yaml").write_text(yaml.dump({"status_mode": "triggered"}))
+        app._prefs = app._load_prefs()
+        assert app.status_mode == "triggered"
+
+    def test_save_and_reload_scope(self, app):
+        app._prefs["scope"] = "all"
+        app.save_prefs()
+        app._prefs = app._load_prefs()
+        assert app.scope == "all"
+
+    def test_save_and_reload_status_mode(self, app):
+        app._prefs["status_mode"] = "acknowledged"
+        app.save_prefs()
+        app._prefs = app._load_prefs()
+        assert app.status_mode == "acknowledged"
+
+
 class TestTuiAppInit:
     def test_cfg_stored(self, cfg):
         app = TuiApp(cfg=cfg)

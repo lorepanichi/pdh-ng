@@ -137,6 +137,24 @@ class TestStatusBar:
             label = bar.query_one("#count-label", Label)
             assert "something went wrong" in str(label.render())
 
+    async def test_default_status_mode(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._status_mode == "all"
+
+    async def test_initial_status_mode_from_param(self):
+        app = StatusBarApp()
+        async with app.run_test():
+            pass
+
+        class _App(App):
+            def compose(self) -> ComposeResult:
+                yield StatusBar(status_mode="triggered", id="status-bar")
+
+        async with _App().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._status_mode == "triggered"
+
     async def test_default_refresh_interval(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)

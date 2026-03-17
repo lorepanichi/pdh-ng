@@ -102,6 +102,7 @@ class IncidentsScreen(Screen):
         self._incidents_cache: dict[str, dict] = {}
         self._selected_ids: set[str] = set()
         self._visible_columns: list[str] = []  # loaded from app prefs on mount
+        self._status_mode: str = "all"
         self._refresh_interval: int = 5
         self._refresh_timer: Timer | None = None
 
@@ -113,10 +114,25 @@ class IncidentsScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        bar = self.query_one("#status-bar", StatusBar)
+        if not self._show_all:
+            bar._scope = self.app.scope
+        bar._status_mode = self.app.status_mode
+        bar._refresh_interval = self.app.refresh_interval
+        bar._sync_buttons()
+        self._scope = bar._scope
+        self._status_mode = bar._status_mode
+        self._current_statuses = bar._active_statuses()
         self._visible_columns = self.app.visible_columns
+        self._refresh_interval = bar._refresh_interval
         self.query_one("#title-filter").display = False
         self._rebuild_columns()
         self.load_incidents()
+
+    def on_unmount(self) -> None:
+        self.app._prefs["scope"] = self._scope
+        self.app._prefs["status_mode"] = self._status_mode
+        self.app.save_prefs()
 
     def _schedule_next_refresh(self) -> None:
         if self._refresh_timer is not None:
@@ -147,6 +163,7 @@ class IncidentsScreen(Screen):
         self._current_statuses = event.statuses
         self._current_urgencies = event.urgencies
         self._scope = event.scope
+        self._status_mode = event.status_mode
         self._schedule_next_refresh()
 
     @on(Input.Changed, "#title-filter")
@@ -319,6 +336,7 @@ class IncidentsScreen(Screen):
     @on(StatusBar.RefreshIntervalChanged)
     def _on_refresh_interval_changed(self, event: StatusBar.RefreshIntervalChanged) -> None:
         self._start_refresh(event.interval)
+        self.app.refresh_interval = event.interval
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:

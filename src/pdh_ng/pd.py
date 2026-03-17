@@ -44,7 +44,7 @@ class PagerDuty:
 
         self.cfg: Config = cfg
         self.session: RestApiV2Client = RestApiV2Client(cfg["apikey"], default_from=cfg["email"])
-        self.session.max_network_attempts = 5
+        self.session.max_network_attempts = cfg.get("max_network_attempts", 5)
         self.users = Users(self.cfg, self.session)
         self.services = Services(self.cfg, self.session)
         self.incidents = Incidents(self.cfg, self.session)

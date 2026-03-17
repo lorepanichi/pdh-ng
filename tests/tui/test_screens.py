@@ -121,10 +121,24 @@ class TestCellValue:
 
 
 class _IncidentsApp(App):
-    def __init__(self) -> None:
+    def __init__(self, prefs: dict | None = None) -> None:
         super().__init__()
         self.cfg = {"apikey": "x", "uid": "U1", "email": "a@b.com"}
+        self._prefs = prefs or {}
         self.visible_columns = DEFAULT_COLUMNS[:]
+        self.refresh_interval = 5
+        self._prefs_saved: dict | None = None
+
+    @property
+    def scope(self) -> str:
+        return self._prefs.get("scope", "mine")
+
+    @property
+    def status_mode(self) -> str:
+        return self._prefs.get("status_mode", "all")
+
+    def save_prefs(self) -> None:
+        self._prefs_saved = dict(self._prefs)
 
     def compose(self) -> ComposeResult:
         yield IncidentsScreen()
@@ -199,3 +213,37 @@ class TestIncidentsScreenAutoRefresh:
                 bar.cycle_refresh()  # off -> 3s
                 await pilot.pause()
                 assert screen._refresh_timer is not None
+
+
+class TestIncidentsScreenStatePrefs:
+    async def test_scope_loaded_from_prefs(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp(prefs={"scope": "team"}).run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                assert screen._scope == "team"
+
+    async def test_status_mode_loaded_from_prefs(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp(prefs={"status_mode": "triggered"}).run_test() as pilot:
+                bar = pilot.app.query_one(StatusBar)
+                assert bar._status_mode == "triggered"
+
+    async def test_on_unmount_saves_scope(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            app = _IncidentsApp()
+            async with app.run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._scope = "all"
+                screen.on_unmount()
+            assert app._prefs.get("scope") == "all"
+            assert app._prefs_saved is not None
+
+    async def test_on_unmount_saves_status_mode(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            app = _IncidentsApp()
+            async with app.run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._status_mode = "acknowledged"
+                screen.on_unmount()
+            assert app._prefs.get("status_mode") == "acknowledged"
+            assert app._prefs_saved is not None
