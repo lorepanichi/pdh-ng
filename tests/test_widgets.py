@@ -8,6 +8,8 @@ from pdh_ng.tui.widgets import (
     FieldSelectorScreen,
     SnoozeDialog,
     StatusBar,
+    _REFRESH_CYCLE,
+    _REFRESH_LABELS,
 )
 
 
@@ -17,9 +19,15 @@ class StatusBarApp(App):
     def __init__(self, scope="mine"):
         super().__init__()
         self._scope = scope
+        self.received_intervals: list[int] = []
 
     def compose(self) -> ComposeResult:
         yield StatusBar(scope=self._scope, id="status-bar")
+
+    def on_status_bar_refresh_interval_changed(
+        self, event: StatusBar.RefreshIntervalChanged
+    ) -> None:
+        self.received_intervals.append(event.interval)
 
 
 class ModalApp(App):
@@ -105,12 +113,22 @@ class TestStatusBar:
             label = bar.query_one("#count-label", Label)
             assert "disk" in str(label.render())
 
-    async def test_set_loading(self):
+    async def test_set_loading_no_prior_count(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
             bar.set_loading()
             label = bar.query_one("#count-label", Label)
-            assert "Loading" in str(label.render())
+            assert "↻" in str(label.render())
+
+    async def test_set_loading_preserves_count(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.set_count(7)
+            bar.set_loading()
+            label = bar.query_one("#count-label", Label)
+            rendered = str(label.render())
+            assert "7" in rendered
+            assert "↻" in rendered
 
     async def test_set_error(self):
         async with StatusBarApp().run_test() as pilot:
@@ -118,6 +136,59 @@ class TestStatusBar:
             bar.set_error("something went wrong")
             label = bar.query_one("#count-label", Label)
             assert "something went wrong" in str(label.render())
+
+    async def test_default_refresh_interval(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._refresh_interval == 5
+
+    async def test_cycle_refresh_full_sequence(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_refresh()
+            assert bar._refresh_interval == 10
+            bar.cycle_refresh()
+            assert bar._refresh_interval == 0
+            bar.cycle_refresh()
+            assert bar._refresh_interval == 3
+            bar.cycle_refresh()
+            assert bar._refresh_interval == 5
+
+    async def test_cycle_refresh_wraps(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            for _ in range(len(_REFRESH_CYCLE)):
+                bar.cycle_refresh()
+            assert bar._refresh_interval == 5
+
+    async def test_refresh_button_label_updates(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            for expected in [10, 0, 3, 5]:
+                bar.cycle_refresh()
+                await pilot.pause()
+                label = str(pilot.app.query_one("#refresh-btn").label)
+                assert label == _REFRESH_LABELS[expected]
+
+    async def test_refresh_button_click_cycles(self):
+        async with StatusBarApp().run_test() as pilot:
+            await pilot.click("#refresh-btn")
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._refresh_interval == 10
+
+    async def test_refresh_interval_changed_message(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_refresh()
+            await pilot.pause()
+            assert pilot.app.received_intervals == [10]
+
+    async def test_all_labels_have_refresh_symbol(self):
+        for label in _REFRESH_LABELS.values():
+            assert "↻" in label
+
+    async def test_off_label(self):
+        assert "off" in _REFRESH_LABELS[0]
 
 
 class TestSnoozeDialog:

@@ -1,6 +1,10 @@
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
-from pdh_ng.tui.screens import _cell_value, _colored, _fmt_age, _urgency_marker
+from textual.app import App, ComposeResult
+
+from pdh_ng.tui.screens import IncidentsScreen, _cell_value, _colored, _fmt_age, _urgency_marker
+from pdh_ng.tui.widgets import DEFAULT_COLUMNS, StatusBar
 
 
 class TestFmtAge:
@@ -114,3 +118,84 @@ class TestCellValue:
 
     def test_unknown_column(self):
         assert _cell_value({"foo": "bar"}, "nonexistent") == ""
+
+
+class _IncidentsApp(App):
+    def __init__(self) -> None:
+        super().__init__()
+        self.cfg = {"apikey": "x", "uid": "U1", "email": "a@b.com"}
+        self.visible_columns = DEFAULT_COLUMNS[:]
+
+    def compose(self) -> ComposeResult:
+        yield IncidentsScreen()
+
+
+class TestIncidentsScreenAutoRefresh:
+    async def test_schedule_next_refresh_sets_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._schedule_next_refresh()
+                assert screen._refresh_timer is not None
+
+    async def test_schedule_next_refresh_interval_zero_no_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._refresh_interval = 0
+                screen._schedule_next_refresh()
+                assert screen._refresh_timer is None
+
+    async def test_next_refresh_scheduled_after_populate(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._populate_table([], "mine", "")
+                assert screen._refresh_timer is not None
+
+    async def test_next_refresh_scheduled_after_error(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._set_error("timeout")
+                assert screen._refresh_timer is not None
+
+    async def test_start_refresh_zero_clears_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._start_refresh(5)
+                assert screen._refresh_timer is not None
+                screen._start_refresh(0)
+                assert screen._refresh_timer is None
+
+    async def test_start_refresh_positive_sets_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._start_refresh(0)
+                assert screen._refresh_timer is None
+                screen._start_refresh(3)
+                assert screen._refresh_timer is not None
+
+    async def test_cycling_to_off_stops_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                bar = pilot.app.query_one(StatusBar)
+                while bar._refresh_interval != 0:
+                    bar.cycle_refresh()
+                await pilot.pause()
+                assert screen._refresh_timer is None
+
+    async def test_cycling_from_off_restarts_timer(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                bar = pilot.app.query_one(StatusBar)
+                while bar._refresh_interval != 0:
+                    bar.cycle_refresh()
+                await pilot.pause()
+                bar.cycle_refresh()  # off -> 3s
+                await pilot.pause()
+                assert screen._refresh_timer is not None

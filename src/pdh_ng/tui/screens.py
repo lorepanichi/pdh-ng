@@ -11,6 +11,7 @@ from textual.binding import Binding
 from textual.containers import ScrollableContainer
 from textual.coordinate import Coordinate
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from ..pd import STATUS_ACK, STATUS_TRIGGERED, PagerDuty
@@ -75,8 +76,9 @@ def _cell_value(inc: dict, col: str) -> str:
 
 class IncidentsScreen(Screen):
     BINDINGS = [
-        Binding("1", "toggle_scope", "mine/all", show=False),
+        Binding("1", "cycle_scope", "scope filter", show=False),
         Binding("2", "cycle_status", "status filter", show=False),
+        Binding("3", "cycle_refresh", "refresh interval", show=False),
         ("a", "ack_selected", "Ack"),
         ("r", "resolve_selected", "Resolve"),
         ("s", "snooze_selected", "Snooze"),
@@ -85,7 +87,6 @@ class IncidentsScreen(Screen):
         ("enter", "open_detail", "Detail"),
         ("f", "toggle_filter", "Filter"),
         ("c", "select_columns", "Columns"),
-        ("ctrl+r", "reload", "Reload"),
     ]
 
     SUB_TITLE = "Incidents"
@@ -101,6 +102,8 @@ class IncidentsScreen(Screen):
         self._incidents_cache: dict[str, dict] = {}
         self._selected_ids: set[str] = set()
         self._visible_columns: list[str] = []  # loaded from app prefs on mount
+        self._refresh_interval: int = 5
+        self._refresh_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -115,6 +118,25 @@ class IncidentsScreen(Screen):
         self._rebuild_columns()
         self.load_incidents()
 
+    def _schedule_next_refresh(self) -> None:
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+        if self._refresh_interval > 0:
+            self._refresh_timer = self.set_timer(self._refresh_interval, self._on_refresh_timer)
+
+    def _on_refresh_timer(self) -> None:
+        self._refresh_timer = None
+        self.load_incidents()
+
+    def _start_refresh(self, interval: int) -> None:
+        self._refresh_interval = interval
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+        if interval > 0:
+            self._refresh_timer = self.set_timer(interval, self._on_refresh_timer)
+
     def _rebuild_columns(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         table.clear(columns=True)
@@ -125,12 +147,12 @@ class IncidentsScreen(Screen):
         self._current_statuses = event.statuses
         self._current_urgencies = event.urgencies
         self._scope = event.scope
-        self.load_incidents()
+        self._schedule_next_refresh()
 
     @on(Input.Changed, "#title-filter")
     def _on_title_filter_changed(self, event: Input.Changed) -> None:
         self._title_filter = event.value
-        self.load_incidents()
+        self._schedule_next_refresh()
 
     @work(exclusive=True, thread=True)
     def load_incidents(self) -> None:
@@ -166,6 +188,7 @@ class IncidentsScreen(Screen):
 
     def _set_error(self, message: str) -> None:
         self.query_one("#status-bar", StatusBar).set_error(message)
+        self._schedule_next_refresh()
 
     def _populate_table(self, incs: list, scope: str, title_filter: str) -> None:
         table = self.query_one("#incidents-table", DataTable)
@@ -183,6 +206,7 @@ class IncidentsScreen(Screen):
             table.add_row(_urgency_marker(inc), *cells, key=inc_id)
 
         self.query_one("#status-bar", StatusBar).set_count(len(incs), title_filter, scope)
+        self._schedule_next_refresh()
 
     def _get_target_incs(self) -> list[dict]:
         if self._selected_ids:
@@ -283,14 +307,18 @@ class IncidentsScreen(Screen):
         if 0 <= row_idx < len(self._incident_ids):
             self.app.push_screen(IncidentDetailScreen(self._incident_ids[row_idx]))
 
-    def action_toggle_scope(self) -> None:
+    def action_cycle_scope(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_scope()
 
     def action_cycle_status(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_status()
 
-    def action_reload(self) -> None:
-        self.load_incidents()
+    def action_cycle_refresh(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_refresh()
+
+    @on(StatusBar.RefreshIntervalChanged)
+    def _on_refresh_interval_changed(self, event: StatusBar.RefreshIntervalChanged) -> None:
+        self._start_refresh(event.interval)
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:

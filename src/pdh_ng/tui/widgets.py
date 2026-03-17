@@ -18,6 +18,9 @@ _STATUS_VARIANTS = {"all": "default", STATUS_TRIGGERED: "error", STATUS_ACK: "wa
 _SCOPE_CYCLE = ["mine", "team", "all"]
 _SCOPE_LABELS = {"mine": "1:mine", "team": "1:team", "all": "1:all"}
 
+_REFRESH_CYCLE = [0, 3, 5, 10]
+_REFRESH_LABELS = {0: "3:↻ off", 3: "3:↻  3s", 5: "3:↻  5s", 10: "3:↻ 10s"}
+
 
 class StatusBar(Horizontal):
     class FiltersChanged(Message):
@@ -27,11 +30,18 @@ class StatusBar(Horizontal):
             self.urgencies = urgencies
             self.scope = scope
 
+    class RefreshIntervalChanged(Message):
+        def __init__(self, interval: int) -> None:
+            super().__init__()
+            self.interval = interval
+
     def __init__(self, scope: str = "mine", **kwargs) -> None:
         super().__init__(**kwargs)
         self._scope: str = scope
         self._status_mode: str = "all"
         self._urgencies: set[str] = set(DEFAULT_URGENCIES)
+        self._refresh_interval: int = 5
+        self._count_text: str = ""
 
     def compose(self) -> ComposeResult:
         yield Button(_SCOPE_LABELS[self._scope], id="scope-btn", compact=True, flat=True)
@@ -39,6 +49,12 @@ class StatusBar(Horizontal):
             _STATUS_LABELS[self._status_mode],
             id="status-btn",
             variant=_STATUS_VARIANTS[self._status_mode],
+            compact=True,
+            flat=True,
+        )
+        yield Button(
+            _REFRESH_LABELS[self._refresh_interval],
+            id="refresh-btn",
             compact=True,
             flat=True,
         )
@@ -51,10 +67,12 @@ class StatusBar(Horizontal):
 
     def set_count(self, count: int, title_filter: str = "", scope: str = "") -> None:
         suffix = f"  filter: {title_filter!r}" if title_filter else ""
-        self.query_one("#count-label", Label).update(f"   {count} incident(s){suffix}")
+        self._count_text = f"{count} incident(s){suffix}"
+        self.query_one("#count-label", Label).update(f"   {self._count_text}")
 
     def set_loading(self) -> None:
-        self.query_one("#count-label", Label).update("   Loading...")
+        base = f"{self._count_text}  " if self._count_text else ""
+        self.query_one("#count-label", Label).update(f"   {base}↻")
 
     def set_error(self, message: str) -> None:
         self.query_one("#count-label", Label).update(f"   [bold red]{message}[/bold red]")
@@ -64,6 +82,7 @@ class StatusBar(Horizontal):
         btn = self.query_one("#status-btn", Button)
         btn.label = _STATUS_LABELS[self._status_mode]
         btn.variant = _STATUS_VARIANTS[self._status_mode]
+        self.query_one("#refresh-btn", Button).label = _REFRESH_LABELS[self._refresh_interval]
 
     def cycle_scope(self) -> None:
         idx = _SCOPE_CYCLE.index(self._scope)
@@ -77,6 +96,12 @@ class StatusBar(Horizontal):
         self._sync_buttons()
         self._emit()
 
+    def cycle_refresh(self) -> None:
+        idx = _REFRESH_CYCLE.index(self._refresh_interval)
+        self._refresh_interval = _REFRESH_CYCLE[(idx + 1) % len(_REFRESH_CYCLE)]
+        self._sync_buttons()
+        self.post_message(self.RefreshIntervalChanged(self._refresh_interval))
+
     @on(Button.Pressed, "#scope-btn")
     def _on_scope_btn(self) -> None:
         self.cycle_scope()
@@ -84,6 +109,10 @@ class StatusBar(Horizontal):
     @on(Button.Pressed, "#status-btn")
     def _on_status_btn(self) -> None:
         self.cycle_status()
+
+    @on(Button.Pressed, "#refresh-btn")
+    def _on_refresh_btn(self) -> None:
+        self.cycle_refresh()
 
     def _emit(self) -> None:
         self.post_message(
