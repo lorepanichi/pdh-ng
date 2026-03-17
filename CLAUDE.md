@@ -1,6 +1,6 @@
 # pdh-ng
 
-PagerDuty TUI for humans. See @README for project overview and user-facing docs (install, config, keybindings).
+**PDH New Generation** is a PagerDuty TUI. See @README for project overview and user-facing docs (install, config, keybindings).
 
 ## Project layout
 
@@ -31,18 +31,25 @@ uv sync
 uv run pdh-ng
 ```
 
+## CLI (`main.py`)
+
+- `-c FILE` / `--config FILE` — use an alternative config file (overrides `PDH_NG_CONFIG` env var)
+- If `-c FILE` is given and the file does not exist, print error and exit (default path missing is silently ignored)
+
 ## Config loading (`config.py`)
 
-- File: `~/.config/pdh-ng/config.yaml`, env var override: `PDH_NG_CONFIG`
+- File: `~/.config/pdh-ng/config.yaml`, overridable via `-c FILE` or env var `PDH_NG_CONFIG`
 - Required keys: `apikey`, `uid`, `email`
-- Env vars `PDH_NG_APIKEY`, `PDH_NG_UID`, `PDH_NG_EMAIL` fill in any keys missing after file load
+- Every key (required + optional) can be set via env var `PDH_NG_<KEY_UPPERCASE>` — derived automatically by `_env_var(key)`, no hardcoded map
 - File takes precedence over env vars
-- Missing keys after both sources → print error + `sys.exit(1)`
-- Optional keys (with defaults, set in `DEFAULTS` dict after validation):
+- Missing required keys after both sources → print error + `sys.exit(1)`
+- Invalid YAML or non-mapping root → print error + `sys.exit(1)`
+- Optional keys (with defaults in `DEFAULTS` dict, applied after env var fallback):
   - `log_enabled: true`
   - `log_file: ~/.local/state/pdh-ng/logs/tui.log`
   - `log_level: DEBUG`
   - `max_network_attempts: 5`
+- `Config` class: `from_yaml`, `__getitem__`, `__setitem__`, `get`, `__contains__`, `__repr__` — no serialisation methods
 
 ## Key architecture decisions
 

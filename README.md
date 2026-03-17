@@ -1,6 +1,6 @@
 # PDH New Generation
 
-A PagerDuty terminal UI for humans. Manage incidents interactively without leaving the terminal.
+A PagerDuty terminal UI. Manage incidents interactively without leaving the terminal.
 
 ## Requirements
 
@@ -26,35 +26,34 @@ uv tool install .
 
 ## Configuration
 
-`pdh-ng` requires three values to talk to the PagerDuty API:
+Config file: `~/.config/pdh-ng/config.yaml` (override with `-c FILE` or `PDH_NG_CONFIG`).
 
-| Key | Description |
-|-----|-------------|
-| `apikey` | API key — generate from your PagerDuty profile page |
-| `email` | Email address of your PagerDuty account |
-| `uid` | Your PagerDuty user ID — visible in the URL when viewing your profile |
+Every key can be set in the config file or via its environment variable (`PDH_NG_<KEY_UPPERCASE>`). The file takes precedence over env vars.
 
-### Config file
+### Required
 
-Create `~/.config/pdh-ng/config.yaml`:
+| Key | Env var | Description |
+|-----|---------|-------------|
+| `apikey` | `PDH_NG_APIKEY` | API key — generate from your PagerDuty profile page |
+| `email` | `PDH_NG_EMAIL` | Email address of your PagerDuty account |
+| `uid` | `PDH_NG_UID` | Your PagerDuty user ID — visible in the URL when viewing your profile |
+
+### Optional
+
+| Key | Env var | Default | Description |
+|-----|---------|---------|-------------|
+| `log_enabled` | `PDH_NG_LOG_ENABLED` | `true` | Enable/disable logging |
+| `log_file` | `PDH_NG_LOG_FILE` | `~/.local/state/pdh-ng/logs/tui.log` | Log file path |
+| `log_level` | `PDH_NG_LOG_LEVEL` | `DEBUG` | Log level |
+| `max_network_attempts` | `PDH_NG_MAX_NETWORK_ATTEMPTS` | `5` | Retry attempts for API calls |
+
+### Example config file
 
 ```yaml
 apikey: your-api-key
 email: you@example.com
 uid: UXXXXXXX
 ```
-
-### Environment variables
-
-Alternatively, or to override specific keys:
-
-```sh
-export PDH_NG_APIKEY=your-api-key
-export PDH_NG_UID=UXXXXXXX
-export PDH_NG_EMAIL=you@example.com
-```
-
-Environment variables fill in any keys missing from the config file. The file takes precedence over env vars.
 
 ## Usage
 

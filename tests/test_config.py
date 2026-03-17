@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from pdh_ng.config import ENV_KEYS, REQUIRED_KEYS, Config, load_and_validate
+from pdh_ng.config import DEFAULTS, REQUIRED_KEYS, Config, _env_var, load_and_validate
 
 
 @pytest.fixture(autouse=True)
@@ -31,12 +31,6 @@ def partial_yaml(tmp_path):
 
 
 class TestConfig:
-    def test_from_dict(self):
-        cfg = Config()
-        cfg.from_dict({"apikey": "abc", "uid": "U1"})
-        assert cfg["apikey"] == "abc"
-        assert cfg["uid"] == "U1"
-
     def test_from_yaml(self, valid_yaml):
         path, data = valid_yaml
         cfg = Config()
@@ -49,18 +43,6 @@ class TestConfig:
         with pytest.raises(FileNotFoundError):
             cfg.from_yaml(str(tmp_path / "nonexistent.yaml"))
 
-    def test_to_dict(self):
-        cfg = Config()
-        cfg.from_dict({"apikey": "abc"})
-        assert cfg.to_dict() == {"apikey": "abc"}
-
-    def test_to_dict_is_copy(self):
-        cfg = Config()
-        cfg.from_dict({"apikey": "abc"})
-        d = cfg.to_dict()
-        d["apikey"] = "modified"
-        assert cfg["apikey"] == "abc"
-
     def test_setitem_getitem(self):
         cfg = Config()
         cfg["apikey"] = "xyz"
@@ -68,23 +50,10 @@ class TestConfig:
 
     def test_contains(self):
         cfg = Config()
-        cfg.from_dict({"apikey": "abc"})
+        cfg["apikey"] = "abc"
         assert "apikey" in cfg
         assert "uid" not in cfg
 
-    def test_validate_all_keys_present(self):
-        cfg = Config()
-        cfg.from_dict({"apikey": "a", "uid": "b", "email": "c"})
-        assert cfg.validate() is True
-
-    def test_validate_missing_key(self):
-        cfg = Config()
-        cfg.from_dict({"apikey": "a", "uid": "b"})
-        assert cfg.validate() is False
-
-    def test_validate_empty(self):
-        cfg = Config()
-        assert cfg.validate() is False
 
 
 class TestLoadAndValidate:
@@ -128,10 +97,16 @@ class TestLoadAndValidate:
         with pytest.raises(SystemExit):
             load_and_validate(str(path))
 
-    def test_env_key_mapping(self):
-        assert ENV_KEYS["apikey"] == "PDH_NG_APIKEY"
-        assert ENV_KEYS["uid"] == "PDH_NG_UID"
-        assert ENV_KEYS["email"] == "PDH_NG_EMAIL"
+    def test_env_var_naming(self):
+        assert _env_var("apikey") == "PDH_NG_APIKEY"
+        assert _env_var("uid") == "PDH_NG_UID"
+        assert _env_var("log_level") == "PDH_NG_LOG_LEVEL"
+
+    def test_optional_key_overridable_via_env(self, valid_yaml, monkeypatch):
+        path, _ = valid_yaml
+        monkeypatch.setenv("PDH_NG_LOG_LEVEL", "WARNING")
+        cfg = load_and_validate(str(path))
+        assert cfg["log_level"] == "WARNING"
 
     def test_required_keys(self):
         assert set(REQUIRED_KEYS) == {"apikey", "uid", "email"}

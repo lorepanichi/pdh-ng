@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 from typing import Any
@@ -17,51 +16,13 @@ DEFAULTS = {
 
 
 class Config:
-    cfg = {}
-
     def __init__(self) -> None:
-        super().__init__()
-        self.cfg = {}
+        self.cfg: dict = {}
 
-    def from_yaml(self, path, key: str | None = None) -> None:
-        """Load configuration from a yaml file, store it directly or under the specified key."""
-
+    def from_yaml(self, path: str) -> None:
         with open(os.path.expanduser(path)) as f:
             o = yaml.safe_load(f.read())
-        if key:
-            self.cfg[key] = o
-        else:
-            self.cfg.update(o)
-
-    def from_dict(self, d: dict) -> None:
-        self.cfg.update(d)
-
-    def to_dict(self) -> dict:
-        return self.cfg.copy()
-
-    def to_yaml(self, fileName: str) -> None:
-        with open(os.path.expanduser(fileName), "w") as f:
-            yaml.safe_dump(self.cfg, f)
-
-    def to_json(self, fileName: str) -> None:
-        with open(os.path.expanduser(fileName), "w") as f:
-            json.dump(self.cfg, f)
-
-    def from_json(self, path, key: str | None = None) -> None:
-        """Load configuration from a json file, store it directly or under the specified key."""
-        with open(os.path.expanduser(path)) as f:
-            o = json.load(f)
-
-        if key:
-            self.cfg[key] = o
-        else:
-            self.cfg.update(o)
-
-    def validate(self) -> bool:
-        for k in REQUIRED_KEYS:
-            if k not in self.cfg.keys():
-                return False
-        return True
+        self.cfg.update(o)
 
     def __getitem__(self, key: str) -> Any:
         return self.cfg[key]
@@ -70,9 +31,6 @@ class Config:
         self.cfg[key] = value
 
     def __repr__(self) -> str:
-        return repr(self.cfg)
-
-    def __str__(self) -> str:
         return repr(self.cfg)
 
     def get(self, key: str, default=None):
@@ -85,11 +43,8 @@ class Config:
 config = Config()
 
 
-ENV_KEYS = {
-    "apikey": "PDH_NG_APIKEY",
-    "uid": "PDH_NG_UID",
-    "email": "PDH_NG_EMAIL",
-}
+def _env_var(key: str) -> str:
+    return f"PDH_NG_{key.upper()}"
 
 
 def load_and_validate(fileName: str) -> Config:
@@ -97,15 +52,21 @@ def load_and_validate(fileName: str) -> Config:
         config.from_yaml(fileName)
     except FileNotFoundError:
         pass
+    except (yaml.YAMLError, ValueError):
+        print("[red]Config file must be valid YAML with a mapping at the root.[/red]")
+        sys.exit(1)
 
-    for key, env_var in ENV_KEYS.items():
-        if key not in config and (val := os.environ.get(env_var)):
+    for key in REQUIRED_KEYS + list(DEFAULTS.keys()):
+        if key not in config and (val := os.environ.get(_env_var(key))):
             config[key] = val
 
-    missing = [ENV_KEYS[k] for k in REQUIRED_KEYS if k not in config]
-    if missing:
-        vars = ", ".join(missing)
-        print(f"[red]Missing config. Set via ~/.config/pdh-ng/config.yaml or env: {vars}[/red]")
+    missing_keys = [k for k in REQUIRED_KEYS if k not in config]
+    if missing_keys:
+        missing_env = [_env_var(k) for k in missing_keys]
+        print(
+            f"[red]Missing required config: {', '.join(missing_keys)}."
+            f" Set via config file or env: {', '.join(missing_env)}[/red]"
+        )
         sys.exit(1)
 
     for key, value in DEFAULTS.items():
