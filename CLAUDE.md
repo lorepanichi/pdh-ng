@@ -1,6 +1,6 @@
 # pdh-ng
 
-PagerDuty TUI for humans. See [README.md](README.md) for user-facing docs (install, config, keybindings).
+PagerDuty TUI for humans. See @README for project overview and user-facing docs (install, config, keybindings).
 
 ## Project layout
 
@@ -21,7 +21,7 @@ tests/
 
 ## Running
 
-```bash
+```sh
 uv sync
 uv run pdh-ng
 ```

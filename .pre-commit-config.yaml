@@ -1,4 +1,16 @@
 repos:
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.93.8
+    hooks:
+      - id: trufflehog
+        args:
+          - git
+          - file://.
+          - --since-commit
+          - HEAD
+          - --only-verified
+          - --fail
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -8,6 +20,7 @@ repos:
       - id: check-merge-conflict
       - id: check-symlinks
       - id: detect-private-key
+
   -   repo: https://github.com/charliermarsh/ruff-pre-commit
       rev: v0.15.6
       hooks:
