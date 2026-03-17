@@ -1,0 +1,130 @@
+Screen {
+    background: $surface;
+}
+
+#incidents-table {
+    height: 1fr;
+}
+
+#title-filter {
+    height: 3;
+    dock: top;
+    background: $panel;
+    border: tall $accent;
+    display: none;
+}
+
+StatusBar {
+    height: 1;
+    background: $warning;
+    color: $text;
+    align: left middle;
+}
+
+StatusBar Button {
+    height: 1;
+    border: none;
+    background: transparent;
+    padding: 0 1;
+    min-width: 0;
+    color: $text;
+}
+
+StatusBar Button:hover {
+    background: $warning-darken-2;
+}
+
+StatusBar Label {
+    height: 1;
+    padding: 0 1;
+}
+
+FieldSelectorScreen {
+    align: center middle;
+}
+
+#field-selector-dialog {
+    background: $panel;
+    border: thick $accent;
+    padding: 1 2;
+    width: 70;
+    height: auto;
+    max-height: 80%;
+}
+
+#field-selector-dialog Label {
+    margin-bottom: 1;
+}
+
+#field-selector-list {
+    height: auto;
+    max-height: 70%;
+}
+
+SnoozeDialog {
+    align: center middle;
+}
+
+#snooze-dialog {
+    background: $panel;
+    border: thick $accent;
+    padding: 2 4;
+    width: 50;
+    height: auto;
+}
+
+#snooze-dialog Label {
+    margin-bottom: 1;
+    text-align: center;
+    width: 100%;
+}
+
+#snooze-buttons {
+    height: auto;
+    align: center middle;
+}
+
+#snooze-buttons Button {
+    margin: 0 1;
+}
+
+ConfirmDialog {
+    align: center middle;
+}
+
+#confirm-dialog {
+    background: $panel;
+    border: thick $accent;
+    padding: 2 4;
+    width: 50;
+    height: auto;
+}
+
+#confirm-dialog Label {
+    margin-bottom: 1;
+    text-align: center;
+    width: 100%;
+}
+
+#confirm-buttons {
+    height: auto;
+    align: center middle;
+}
+
+#confirm-buttons Button {
+    margin: 0 1;
+}
+
+IncidentDetailScreen ScrollableContainer {
+    height: 1fr;
+    padding: 1 2;
+}
+
+#incident-info {
+    margin-bottom: 1;
+}
+
+#alerts-table {
+    height: auto;
+    min-height: 8;
+}

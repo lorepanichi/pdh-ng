@@ -1,0 +1,57 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task -l
+    silent: true
+
+  lint:
+    desc: Run ruff linter and formatter checks
+    cmds:
+      - uv run ruff check src/ tests/
+      - uv run ruff format --check src/ tests/
+
+  test:
+    desc: Run tests
+    cmds:
+      - uv run pytest tests/
+
+  check:
+    desc: Run lint, tests, and all pre-commit hooks
+    cmds:
+      - task: lint
+      - task: test
+      - pre-commit run -a
+
+  pre-commit:
+    cmds:
+      - pre-commit install
+    sources:
+      - .git/hooks/pre-commit
+      - .pre-commit-config.yaml
+    generates:
+      - .git/hooks/pre-commit
+    method: checksum
+
+  dependency-install:
+    cmds:
+      - uv sync
+    sources:
+      - uv.lock
+      - pyproject.toml
+    generates:
+      - uv.lock
+    method: checksum
+
+  dependency-install-ci:
+    cmds:
+      - uv sync
+    sources:
+      - uv.lock
+      - pyproject.toml
+    generates:
+      - uv.lock
+    method: checksum
