@@ -139,13 +139,9 @@ class TestUsers:
     @pytest.fixture
     def users(self, cfg, mock_session):
         u = Users(cfg, mock_session)
-        Users.fetch.cache_clear()
-        Users.get.cache_clear()
-        Users.search.cache_clear()
-        Users.id.cache_clear()
-        Users.id_by_email.cache_clear()
-        Users.teams.cache_clear()
-        Users.team_id.cache_clear()
+        Users._fetch_cached.cache_clear()
+        Users._get_cached.cache_clear()
+        Users._search_cached.cache_clear()
         return u
 
     def test_fetch_calls_iter_all(self, users, mock_session):
@@ -244,10 +240,9 @@ class TestTeams:
     @pytest.fixture
     def teams(self, cfg, mock_session):
         t = Teams(cfg, mock_session)
-        Teams.fetch.cache_clear()
-        Teams.get.cache_clear()
-        Teams.search.cache_clear()
-        Teams.id.cache_clear()
+        Teams._fetch_cached.cache_clear()
+        Teams._get_cached.cache_clear()
+        Teams._search_cached.cache_clear()
         return t
 
     def test_fetch_calls_iter_all(self, teams, mock_session):
@@ -298,9 +293,3 @@ class TestPagerDuty:
             with pytest.raises(UnauthorizedException):
                 PagerDuty(cfg)
 
-    def test_constants_exposed(self):
-        assert PagerDuty.INCIDENT_STATUS_TRIGGERED == STATUS_TRIGGERED
-        assert PagerDuty.INCIDENT_STATUS_ACK == STATUS_ACK
-        assert PagerDuty.INCIDENT_STATUS_RESOLVED == STATUS_RESOLVED
-        assert PagerDuty.INCIDENT_URGENCY_HIGH == "high"
-        assert PagerDuty.INCIDENT_URGENCY_LOW == "low"

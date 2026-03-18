@@ -243,22 +243,26 @@ class TestIncidentsScreenAutoRefresh:
                 screen._set_error("timeout")
                 assert screen._refresh_timer is not None
 
-    async def test_start_refresh_zero_clears_timer(self):
+    async def test_schedule_refresh_zero_clears_timer(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._start_refresh(RefreshTime.S5)
+                screen._refresh_time = RefreshTime.S5
+                screen._schedule_next_refresh()
                 assert screen._refresh_timer is not None
-                screen._start_refresh(RefreshTime.OFF)
+                screen._refresh_time = RefreshTime.OFF
+                screen._schedule_next_refresh()
                 assert screen._refresh_timer is None
 
-    async def test_start_refresh_positive_sets_timer(self):
+    async def test_schedule_refresh_positive_sets_timer(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._start_refresh(RefreshTime.OFF)
+                screen._refresh_time = RefreshTime.OFF
+                screen._schedule_next_refresh()
                 assert screen._refresh_timer is None
-                screen._start_refresh(RefreshTime.S3)
+                screen._refresh_time = RefreshTime.S3
+                screen._schedule_next_refresh()
                 assert screen._refresh_timer is not None
 
     async def test_cycling_to_off_stops_timer(self):

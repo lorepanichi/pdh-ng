@@ -112,6 +112,8 @@ class IncidentsScreen(Screen):
 
     SUB_TITLE = "Incidents"
 
+    # -- lifecycle --
+
     def __init__(self) -> None:
         super().__init__()
         self._inc_scope: IncScope = IncScope.MINE
@@ -174,6 +176,8 @@ class IncidentsScreen(Screen):
         self._suspended = False
         self._schedule_next_refresh()
 
+    # -- auto-refresh --
+
     def _schedule_next_refresh(self) -> None:
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
@@ -185,46 +189,13 @@ class IncidentsScreen(Screen):
         self._refresh_timer = None
         self.load_incidents()
 
-    def _start_refresh(self, refresh_time: RefreshTime) -> None:
-        self._refresh_time = refresh_time
-        if self._refresh_timer is not None:
-            self._refresh_timer.stop()
-            self._refresh_timer = None
-        if refresh_time > 0:
-            self._refresh_timer = self.set_timer(refresh_time, self._on_refresh_timer)
+    # -- table / data --
 
     def _rebuild_columns(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         table.clear(columns=True)
         table.add_column("", width=2)
         table.add_columns(*self._visible_columns)
-
-    @on(StatusBar.ScopeChanged)
-    def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
-        self._inc_scope = event.inc_scope
-        self.app.inc_scope = event.inc_scope
-        self._schedule_next_refresh()
-
-    @on(StatusBar.StatusChanged)
-    def _on_status_changed(self, event: StatusBar.StatusChanged) -> None:
-        self._inc_status = event.inc_status
-        self._current_statuses = _INC_STATUS_API[event.inc_status]
-        self.app.inc_status = event.inc_status
-        self._schedule_next_refresh()
-
-    @on(StatusBar.UrgencyChanged)
-    def _on_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
-        self._inc_urgency = event.inc_urgency
-        self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
-        self.app.inc_urgency = event.inc_urgency
-        self._schedule_next_refresh()
-
-    @on(Input.Submitted, "#title-filter")
-    def _on_title_filter_submitted(self, event: Input.Submitted) -> None:
-        self._title_filter = event.value
-        self.query_one("#title-filter", Input).display = False
-        self.query_one("#incidents-table").focus()
-        self.load_incidents()
 
     @work(exclusive=True, thread=True)
     def load_incidents(self) -> None:
@@ -298,31 +269,63 @@ class IncidentsScreen(Screen):
         )
         self._schedule_next_refresh()
 
-    def _get_target_incs(self) -> list[dict]:
-        if self._selected_ids:
-            return [
-                self._incidents_cache[i] for i in self._selected_ids if i in self._incidents_cache
-            ]
-        table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
-            inc_id = self._incident_ids[row_idx]
-            if inc_id in self._incidents_cache:
-                return [self._incidents_cache[inc_id]]
-        return []
+    # -- event handlers --
 
-    def action_toggle_select(self) -> None:
-        table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
-            inc_id = self._incident_ids[row_idx]
-            inc = self._incidents_cache.get(inc_id, {})
-            if inc_id in self._selected_ids:
-                self._selected_ids.discard(inc_id)
-                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, False))
-            else:
-                self._selected_ids.add(inc_id)
-                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, True))
+    @on(StatusBar.ScopeChanged)
+    def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
+        self._inc_scope = event.inc_scope
+        self.app.inc_scope = event.inc_scope
+        self._schedule_next_refresh()
+
+    @on(StatusBar.StatusChanged)
+    def _on_status_changed(self, event: StatusBar.StatusChanged) -> None:
+        self._inc_status = event.inc_status
+        self._current_statuses = _INC_STATUS_API[event.inc_status]
+        self.app.inc_status = event.inc_status
+        self._schedule_next_refresh()
+
+    @on(StatusBar.UrgencyChanged)
+    def _on_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
+        self._inc_urgency = event.inc_urgency
+        self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
+        self.app.inc_urgency = event.inc_urgency
+        self._schedule_next_refresh()
+
+    @on(StatusBar.RefreshTimeChanged)
+    def _on_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
+        self._refresh_time = event.refresh_time
+        self.app.refresh_time = event.refresh_time
+        self._schedule_next_refresh()
+
+    @on(Input.Submitted, "#title-filter")
+    def _on_title_filter_submitted(self, event: Input.Submitted) -> None:
+        self._title_filter = event.value
+        self.query_one("#title-filter", Input).display = False
+        self.query_one("#incidents-table").focus()
+        self.load_incidents()
+
+    # -- actions: filter controls --
+
+    def action_cycle_scope(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_scope()
+
+    def action_cycle_status(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_status()
+
+    def action_cycle_urgency(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_urgency()
+
+    def action_cycle_refresh(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_refresh()
+
+    def action_toggle_filter(self) -> None:
+        filter_input = self.query_one("#title-filter", Input)
+        filter_input.display = not filter_input.display
+        if filter_input.display:
+            filter_input.value = self._title_filter
+            filter_input.focus()
+        else:
+            self.query_one("#incidents-table").focus()
 
     def action_clear_or_hide_filter(self) -> None:
         filter_input = self.query_one("#title-filter", Input)
@@ -337,14 +340,18 @@ class IncidentsScreen(Screen):
                 inc = self._incidents_cache.get(inc_id, {})
                 table.update_cell_at(Coordinate(i, 0), _row_marker(inc, False))
 
-    def action_toggle_filter(self) -> None:
-        filter_input = self.query_one("#title-filter", Input)
-        filter_input.display = not filter_input.display
-        if filter_input.display:
-            filter_input.value = self._title_filter
-            filter_input.focus()
-        else:
-            self.query_one("#incidents-table").focus()
+    def action_toggle_select(self) -> None:
+        table = self.query_one("#incidents-table", DataTable)
+        row_idx = table.cursor_row
+        if 0 <= row_idx < len(self._incident_ids):
+            inc_id = self._incident_ids[row_idx]
+            inc = self._incidents_cache.get(inc_id, {})
+            if inc_id in self._selected_ids:
+                self._selected_ids.discard(inc_id)
+                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, False))
+            else:
+                self._selected_ids.add(inc_id)
+                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, True))
 
     def action_select_columns(self) -> None:
         self.app.push_screen(
@@ -364,30 +371,6 @@ class IncidentsScreen(Screen):
             self._title_filter,
         )
 
-    def action_ack_selected(self) -> None:
-        incs = self._get_target_incs()
-        if incs:
-            self.app.push_screen(
-                ConfirmDialog(f"Acknowledge {len(incs)} incident(s)?"),
-                lambda confirmed: self._do_ack(incs) if confirmed else None,
-            )
-
-    def action_resolve_selected(self) -> None:
-        incs = self._get_target_incs()
-        if incs:
-            self.app.push_screen(
-                ConfirmDialog(f"Resolve {len(incs)} incident(s)?"),
-                lambda confirmed: self._do_resolve(incs) if confirmed else None,
-            )
-
-    def action_snooze_selected(self) -> None:
-        incs = self._get_target_incs()
-        if incs:
-            self.app.push_screen(
-                SnoozeDialog(),
-                lambda duration: self._do_snooze(incs, duration) if duration else None,
-            )
-
     def action_view_detail(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
@@ -397,22 +380,28 @@ class IncidentsScreen(Screen):
             if inc is not None:
                 self.app.push_screen(IncidentDetailScreen(inc))
 
-    def action_cycle_scope(self) -> None:
-        self.query_one("#status-bar", StatusBar).cycle_scope()
+    # -- actions: incident mutations --
 
-    def action_cycle_status(self) -> None:
-        self.query_one("#status-bar", StatusBar).cycle_status()
+    def _get_target_incs(self) -> list[dict]:
+        if self._selected_ids:
+            return [
+                self._incidents_cache[i] for i in self._selected_ids if i in self._incidents_cache
+            ]
+        table = self.query_one("#incidents-table", DataTable)
+        row_idx = table.cursor_row
+        if 0 <= row_idx < len(self._incident_ids):
+            inc_id = self._incident_ids[row_idx]
+            if inc_id in self._incidents_cache:
+                return [self._incidents_cache[inc_id]]
+        return []
 
-    def action_cycle_refresh(self) -> None:
-        self.query_one("#status-bar", StatusBar).cycle_refresh()
-
-    def action_cycle_urgency(self) -> None:
-        self.query_one("#status-bar", StatusBar).cycle_urgency()
-
-    @on(StatusBar.RefreshTimeChanged)
-    def _on_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
-        self._start_refresh(event.refresh_time)
-        self.app.refresh_time = event.refresh_time
+    def action_ack_selected(self) -> None:
+        incs = self._get_target_incs()
+        if incs:
+            self.app.push_screen(
+                ConfirmDialog(f"Acknowledge {len(incs)} incident(s)?"),
+                lambda confirmed: self._do_ack(incs) if confirmed else None,
+            )
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:
@@ -426,6 +415,14 @@ class IncidentsScreen(Screen):
             return
         app.call_from_thread(self.load_incidents)
 
+    def action_resolve_selected(self) -> None:
+        incs = self._get_target_incs()
+        if incs:
+            self.app.push_screen(
+                ConfirmDialog(f"Resolve {len(incs)} incident(s)?"),
+                lambda confirmed: self._do_resolve(incs) if confirmed else None,
+            )
+
     @work(thread=True)
     def _do_resolve(self, incs: list[dict]) -> None:
         app = self.app
@@ -437,6 +434,14 @@ class IncidentsScreen(Screen):
             app.call_from_thread(self._set_error, str(e))
             return
         app.call_from_thread(self.load_incidents)
+
+    def action_snooze_selected(self) -> None:
+        incs = self._get_target_incs()
+        if incs:
+            self.app.push_screen(
+                SnoozeDialog(),
+                lambda duration: self._do_snooze(incs, duration) if duration else None,
+            )
 
     @work(thread=True)
     def _do_snooze(self, incs: list[dict], duration: int) -> None:
