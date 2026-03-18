@@ -118,7 +118,7 @@ All five are r/w properties on `TuiApp`. Setters write to `_prefs` in memory onl
 Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config keys `log_enabled`, `log_file`, `log_level`. If disabled, adds `NullHandler` to suppress output.
 
 ### Caching
-`Users` and `Teams` methods use `@lru_cache()` with a `ttl_hash(seconds=30)` argument to expire every 30s. `Incidents` is never cached — always fetches live.
+`Users` and `Teams` methods cache with a 30s TTL using a two-method pattern: the public method calls `ttl_hash()` at invocation time and passes it to a `@lru_cache`-decorated private method (e.g. `get` → `_get_cached`). This ensures the TTL bucket changes each 30s window and the cache actually expires. Do NOT put `ttl_hash()` as a default argument — default args are evaluated once at import time, so the cache would never expire. `Incidents` is never cached — always fetches live.
 
 ### Screen compose vs on_mount
 Do NOT access `self.app` inside `IncidentsScreen.compose()` — the screen may be embedded as a widget in tests before the app reference is fully wired. Read all prefs in `on_mount()` instead.

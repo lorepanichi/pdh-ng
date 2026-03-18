@@ -28,16 +28,6 @@ def ttl_hash(seconds=30):
 
 
 class PagerDuty:
-    INCIDENT_STATUS_TRIGGERED = STATUS_TRIGGERED
-    INCIDENT_STATUS_ACK = STATUS_ACK
-    INCIDENT_STATUS_RESOLVED = STATUS_RESOLVED
-
-    INCIDENT_URGENCY_HIGH = URGENCY_HIGH
-    INCIDENT_URGENCY_LOW = URGENCY_LOW
-
-    DEFAULT_STATUSES = DEFAULT_STATUSES
-    DEFAULT_URGENCIES = DEFAULT_URGENCIES
-
     def __init__(self, cfg: Config) -> None:
         super().__init__()
 
@@ -126,55 +116,48 @@ class Users:
         self.cfg = cfg
         self.session = session
 
-    @lru_cache
-    def fetch(self, ttl=ttl_hash()) -> list[dict] | Iterator[dict]:
+    def fetch(self) -> list[dict] | Iterator[dict]:
         """list all users in PagerDuty account"""
-        users = self.session.iter_all("users")
-
-        return users
+        return self._fetch_cached(ttl_hash())
 
     @lru_cache
-    def get(self, id: str, ttl=ttl_hash()) -> dict | list:
+    def _fetch_cached(self, ttl: int) -> list[dict] | Iterator[dict]:
+        return self.session.iter_all("users")
+
+    def get(self, id: str) -> dict | list:
         """Get a single user by ID"""
+        return self._get_cached(id, ttl_hash())
+
+    @lru_cache
+    def _get_cached(self, id: str, ttl: int) -> dict | list:
         return self.session.rget(f"/users/{id}")
 
-    @lru_cache
-    def search(self, query: str, key: str = "name", ttl=ttl_hash()) -> list[dict]:
+    def search(self, query: str, key: str = "name") -> list[dict]:
         """Retrieve all users matching query on the attribute name"""
+        return self._search_cached(query, key, ttl_hash())
 
+    @lru_cache
+    def _search_cached(self, query: str, key: str, ttl: int) -> list[dict]:
         def equiv(s) -> bool:
             return query.lower() in s[key].lower()
 
-        users = [u for u in filter(equiv, self.session.iter_all("users"))]
-        return users
+        return [u for u in filter(equiv, self.session.iter_all("users"))]
 
-    @lru_cache
-    def id(self, query: str, key: str = "name", ttl=ttl_hash()) -> list[str]:
+    def id(self, query: str, key: str = "name") -> list[str]:
         """Retrieve all userIDs matching query on the attribute name"""
-        users = self.search(query, key)
-        userIDs = [u["id"] for u in users]
-        return userIDs
+        return [u["id"] for u in self.search(query, key)]
 
-    @lru_cache
-    def id_by_email(self, query, ttl=ttl_hash()):
+    def id_by_email(self, query: str) -> list[str]:
         """Retrieve all usersIDs matching the given (partial) email"""
         return self.id(query, "email")
 
-    @lru_cache
-    def teams(self, name: str, ttl=ttl_hash()) -> list[dict]:
+    def teams(self, name: str) -> list[dict]:
         """Retrieve all teams for a given user"""
-        users = self.search(query=name)
-        teams = []
-        for user in users:
-            teams.append(user["teams"])
-        return teams
+        return [team for user in self.search(query=name) for team in user["teams"]]
 
-    @lru_cache
-    def team_id(self, name: str, ttl=ttl_hash()) -> list[str]:
+    def team_id(self, name: str) -> list[str]:
         """Retrieve all team IDs for a given user"""
-        teams = self.teams(name)
-        teamIDs = [team["id"] for team in teams]
-        return teamIDs
+        return [team["id"] for team in self.teams(name)]
 
 
 class Services:
@@ -215,31 +198,33 @@ class Teams:
         self.cfg = cfg
         self.session = session
 
-    @lru_cache
-    def fetch(self, ttl=ttl_hash()) -> list[dict] | Iterator[dict]:
+    def fetch(self) -> list[dict] | Iterator[dict]:
         """list all teams in PagerDuty account"""
-        users = self.session.iter_all("teams")
-
-        return users
+        return self._fetch_cached(ttl_hash())
 
     @lru_cache
-    def get(self, id: str, ttl=ttl_hash()) -> dict | list:
+    def _fetch_cached(self, ttl: int) -> list[dict] | Iterator[dict]:
+        return self.session.iter_all("teams")
+
+    def get(self, id: str) -> dict | list:
         """Get a single team by ID"""
+        return self._get_cached(id, ttl_hash())
+
+    @lru_cache
+    def _get_cached(self, id: str, ttl: int) -> dict | list:
         return self.session.rget(f"/teams/{id}")
 
-    @lru_cache
-    def search(self, query: str, key: str = "name", ttl=ttl_hash()) -> list[dict]:
+    def search(self, query: str, key: str = "name") -> list[dict]:
         """Retrieve all teams matching query on the attribute name"""
+        return self._search_cached(query, key, ttl_hash())
 
+    @lru_cache
+    def _search_cached(self, query: str, key: str, ttl: int) -> list[dict]:
         def equiv(s) -> bool:
             return query.lower() in s[key].lower()
 
-        teams = [u for u in filter(equiv, self.session.iter_all("teams"))]
-        return teams
+        return [u for u in filter(equiv, self.session.iter_all("teams"))]
 
-    @lru_cache
-    def id(self, query: str, key: str = "name", ttl=ttl_hash()) -> list[str]:
+    def id(self, query: str, key: str = "name") -> list[str]:
         """Retrieve all teams id matching query on the attribute name"""
-        teams = self.search(query, key)
-        teamids = [u["id"] for u in teams]
-        return teamids
+        return [u["id"] for u in self.search(query, key)]
