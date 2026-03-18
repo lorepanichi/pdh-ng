@@ -5,6 +5,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Input
 
 from pdh_ng.tui.screens import (
+    IncidentDetailScreen,
     IncidentsScreen,
     _apply_title_filter,
     _cell_value,
@@ -13,7 +14,7 @@ from pdh_ng.tui.screens import (
     _urgency_marker,
 )
 from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
-from pdh_ng.tui.widgets import StatusBar
+from pdh_ng.tui.widgets import ConfirmDialog, SnoozeDialog, StatusBar
 
 
 class TestFmtAge:
@@ -440,3 +441,184 @@ class TestIncidentsScreenFilter:
                 await pilot.pause()
 
                 assert screen._title_filter == "cpu spike"
+
+
+_SAMPLE_INC = {
+    "id": "I1",
+    "title": "Test incident",
+    "status": "triggered",
+    "urgency": "high",
+    "assignments": [],
+    "service": {"summary": "web"},
+    "created_at": "2024-01-01T00:00:00Z",
+    "html_url": "https://example.pagerduty.com/incidents/I1",
+}
+
+
+class TestIncidentsScreenViewDetail:
+    async def test_pushes_detail_screen_for_cursor_row(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_view_detail()
+                    await pilot.pause()
+                    mock_push.assert_called_once()
+                    assert isinstance(mock_push.call_args[0][0], IncidentDetailScreen)
+
+    async def test_does_nothing_when_table_empty(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = []
+                screen._incidents_cache = {}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_view_detail()
+                    await pilot.pause()
+                    mock_push.assert_not_called()
+
+    async def test_does_nothing_when_incident_missing_from_cache(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_view_detail()
+                    await pilot.pause()
+                    mock_push.assert_not_called()
+
+
+class TestIncidentsScreenToggleSelect:
+    async def test_selects_incident_at_cursor(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                await pilot.pause()
+
+                screen.action_toggle_select()
+                await pilot.pause()
+
+                assert "I1" in screen._selected_ids
+
+    async def test_deselects_already_selected_incident(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                await pilot.pause()
+                screen._selected_ids.add("I1")
+
+                screen.action_toggle_select()
+                await pilot.pause()
+
+                assert "I1" not in screen._selected_ids
+
+    async def test_does_nothing_when_table_empty(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen.action_toggle_select()
+                await pilot.pause()
+                assert not screen._selected_ids
+
+    async def test_escape_clears_all_selections(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                await pilot.pause()
+                screen._selected_ids.add("I1")
+
+                screen.action_clear_or_hide_filter()
+                await pilot.pause()
+
+                assert not screen._selected_ids
+
+
+class TestIncidentsScreenBulkActions:
+    async def test_ack_pushes_confirm_dialog_for_cursor_incident(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_ack_selected()
+                    await pilot.pause()
+                    mock_push.assert_called_once()
+                    dialog = mock_push.call_args[0][0]
+                    assert isinstance(dialog, ConfirmDialog)
+                    assert "1" in dialog._message
+
+    async def test_ack_pushes_confirm_dialog_for_selected_incidents(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                inc2 = {**_SAMPLE_INC, "id": "I2"}
+                screen._incident_ids = ["I1", "I2"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC, "I2": inc2}
+                screen._selected_ids = {"I1", "I2"}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_ack_selected()
+                    await pilot.pause()
+                    mock_push.assert_called_once()
+                    dialog = mock_push.call_args[0][0]
+                    assert isinstance(dialog, ConfirmDialog)
+                    assert "2" in dialog._message
+
+    async def test_ack_does_nothing_when_no_incidents(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_ack_selected()
+                    await pilot.pause()
+                    mock_push.assert_not_called()
+
+    async def test_resolve_pushes_confirm_dialog(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_resolve_selected()
+                    await pilot.pause()
+                    mock_push.assert_called_once()
+                    dialog = mock_push.call_args[0][0]
+                    assert isinstance(dialog, ConfirmDialog)
+                    assert "Resolve" in dialog._message
+
+    async def test_resolve_does_nothing_when_no_incidents(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_resolve_selected()
+                    await pilot.pause()
+                    mock_push.assert_not_called()
+
+    async def test_snooze_pushes_snooze_dialog(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_snooze_selected()
+                    await pilot.pause()
+                    mock_push.assert_called_once()
+                    assert isinstance(mock_push.call_args[0][0], SnoozeDialog)
+
+    async def test_snooze_does_nothing_when_no_incidents(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                with patch.object(pilot.app, "push_screen") as mock_push:
+                    screen.action_snooze_selected()
+                    await pilot.pause()
+                    mock_push.assert_not_called()

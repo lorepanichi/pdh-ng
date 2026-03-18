@@ -100,13 +100,14 @@ class IncidentsScreen(Screen):
         Binding("2", "cycle_status", "status filter", show=False),
         Binding("3", "cycle_urgency", "urgency filter", show=False),
         Binding("4", "cycle_refresh", "refresh interval", show=False),
-        ("a", "ack_selected", "Ack"),
-        ("r", "resolve_selected", "Resolve"),
-        ("s", "snooze_selected", "Snooze"),
-        ("space", "toggle_select", "Select"),
-        ("escape", "clear_or_hide_filter", "Clear"),
-        ("f", "toggle_filter", "Filter"),
-        ("c", "select_columns", "Columns"),
+        Binding("enter", "view_detail", "Detail", priority=True),
+        Binding("a", "ack_selected", "Ack"),
+        Binding("r", "resolve_selected", "Resolve"),
+        Binding("s", "snooze_selected", "Snooze ┃"),
+        Binding("space", "toggle_select", "Select"),
+        Binding("escape", "clear_or_hide_filter", "Clear ┃"),
+        Binding("f", "toggle_filter", "Filter"),
+        Binding("c", "select_columns", "Columns ┃"),
     ]
 
     SUB_TITLE = "Incidents"
@@ -387,13 +388,14 @@ class IncidentsScreen(Screen):
                 lambda duration: self._do_snooze(incs, duration) if duration else None,
             )
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        if event.data_table.id != "incidents-table":
-            return
-        incident_id = str(event.row_key.value)
-        inc = self._incidents_cache.get(incident_id)
-        if inc is not None:
-            self.app.push_screen(IncidentDetailScreen(inc))
+    def action_view_detail(self) -> None:
+        table = self.query_one("#incidents-table", DataTable)
+        row_idx = table.cursor_row
+        if 0 <= row_idx < len(self._incident_ids):
+            inc_id = self._incident_ids[row_idx]
+            inc = self._incidents_cache.get(inc_id)
+            if inc is not None:
+                self.app.push_screen(IncidentDetailScreen(inc))
 
     def action_cycle_scope(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_scope()
