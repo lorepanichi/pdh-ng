@@ -3,7 +3,6 @@ from enum import IntEnum
 from ..pd import STATUS_ACK, STATUS_TRIGGERED, URGENCY_HIGH, URGENCY_LOW
 
 ALL_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
-DEFAULT_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
 
 
 class IncScope(IntEnum):
@@ -53,9 +52,9 @@ _INC_STATUS_API = {
 
 _INC_URGENCY_CYCLE = list(IncUrgency)
 _INC_URGENCY_LABELS = {
-    IncUrgency.ALL: "4:all urgencies",
-    IncUrgency.HIGH: "4:high         ",
-    IncUrgency.LOW: "4:low          ",
+    IncUrgency.ALL: "3:all urgencies",
+    IncUrgency.HIGH: "3:high urgency ",
+    IncUrgency.LOW: "3:low urgency  ",
 }
 _INC_URGENCY_VARIANTS = {
     IncUrgency.ALL: "default",
@@ -70,8 +69,8 @@ _INC_URGENCY_API = {
 
 _REFRESH_TIME_CYCLE = list(RefreshTime)
 _REFRESH_TIME_LABELS = {
-    RefreshTime.OFF: "3:↻ off",
-    RefreshTime.S3: "3:↻ 3s ",
-    RefreshTime.S5: "3:↻ 5s ",
-    RefreshTime.S10: "3:↻ 10s",
+    RefreshTime.OFF: "4:↻ off",
+    RefreshTime.S3: "4:↻ 3s ",
+    RefreshTime.S5: "4:↻ 5s ",
+    RefreshTime.S10: "4:↻ 10s",
 }

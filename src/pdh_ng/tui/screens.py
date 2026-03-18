@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
 
 import humanize
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import ScrollableContainer
 from textual.coordinate import Coordinate
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
-from ..pd import STATUS_ACK, STATUS_TRIGGERED, PagerDuty
+from ..pd import STATUS_ACK, STATUS_TRIGGERED
 from .constants import (
     _INC_STATUS_API,
     _INC_URGENCY_API,
@@ -23,7 +21,7 @@ from .constants import (
     IncUrgency,
     RefreshTime,
 )
-from .widgets import ConfirmDialog, FieldSelectorScreen, SnoozeDialog, StatusBar
+from .widgets import ColumnSelectorScreen, ConfirmDialog, SnoozeDialog, StatusBar
 
 logger = logging.getLogger("pdh-ng.tui")
 
@@ -100,14 +98,13 @@ class IncidentsScreen(Screen):
     BINDINGS = [
         Binding("1", "cycle_scope", "scope filter", show=False),
         Binding("2", "cycle_status", "status filter", show=False),
-        Binding("3", "cycle_refresh", "refresh interval", show=False),
-        Binding("4", "cycle_urgency", "urgency filter", show=False),
+        Binding("3", "cycle_urgency", "urgency filter", show=False),
+        Binding("4", "cycle_refresh", "refresh interval", show=False),
         ("a", "ack_selected", "Ack"),
         ("r", "resolve_selected", "Resolve"),
         ("s", "snooze_selected", "Snooze"),
         ("space", "toggle_select", "Select"),
         ("escape", "clear_or_hide_filter", "Clear"),
-        ("enter", "open_detail", "Detail"),
         ("f", "toggle_filter", "Filter"),
         ("c", "select_columns", "Columns"),
     ]
@@ -128,6 +125,7 @@ class IncidentsScreen(Screen):
         self._visible_columns: list[str] = []  # loaded from app prefs on mount
         self._refresh_time: RefreshTime = RefreshTime.S5
         self._refresh_timer: Timer | None = None
+        self._suspended: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -165,11 +163,21 @@ class IncidentsScreen(Screen):
     def on_unmount(self) -> None:
         self.app.save_prefs()
 
+    def on_screen_suspend(self) -> None:
+        self._suspended = True
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+
+    def on_screen_resume(self) -> None:
+        self._suspended = False
+        self._schedule_next_refresh()
+
     def _schedule_next_refresh(self) -> None:
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
             self._refresh_timer = None
-        if self._refresh_time > 0:
+        if self._refresh_time > 0 and not self._suspended:
             self._refresh_timer = self.set_timer(self._refresh_time, self._on_refresh_timer)
 
     def _on_refresh_timer(self) -> None:
@@ -190,15 +198,23 @@ class IncidentsScreen(Screen):
         table.add_column("", width=2)
         table.add_columns(*self._visible_columns)
 
-    @on(StatusBar.FiltersChanged)
-    def _on_filters_changed(self, event: StatusBar.FiltersChanged) -> None:
-        self._current_statuses = _INC_STATUS_API[event.inc_status]
-        self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
+    @on(StatusBar.ScopeChanged)
+    def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
         self._inc_scope = event.inc_scope
-        self._inc_status = event.inc_status
-        self._inc_urgency = event.inc_urgency
         self.app.inc_scope = event.inc_scope
+        self._schedule_next_refresh()
+
+    @on(StatusBar.StatusChanged)
+    def _on_status_changed(self, event: StatusBar.StatusChanged) -> None:
+        self._inc_status = event.inc_status
+        self._current_statuses = _INC_STATUS_API[event.inc_status]
         self.app.inc_status = event.inc_status
+        self._schedule_next_refresh()
+
+    @on(StatusBar.UrgencyChanged)
+    def _on_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
+        self._inc_urgency = event.inc_urgency
+        self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
         self.app.inc_urgency = event.inc_urgency
         self._schedule_next_refresh()
 
@@ -211,18 +227,18 @@ class IncidentsScreen(Screen):
 
     @work(exclusive=True, thread=True)
     def load_incidents(self) -> None:
-        self.app.call_from_thread(self._set_loading)
+        app = self.app
+        app.call_from_thread(self._set_loading)
         statuses = self._current_statuses
         urgencies = self._current_urgencies
         inc_scope = self._inc_scope
         title_filter = self._title_filter
-        cfg = self.app.cfg
+        pd_client = app.pd
         try:
-            pd_client = PagerDuty(cfg)
             if inc_scope == IncScope.MINE:
                 incs = list(pd_client.incidents.mine(statuses=statuses, urgencies=urgencies))
             elif inc_scope == IncScope.TEAM:
-                user = pd_client.users.get(cfg["uid"])
+                user = pd_client.users.get(app.cfg["uid"])
                 team_ids = [t["id"] for t in user.get("teams", [])]
                 incs = list(
                     pd_client.incidents.fetch(
@@ -232,10 +248,10 @@ class IncidentsScreen(Screen):
             else:
                 incs = list(pd_client.incidents.fetch(statuses=statuses, urgencies=urgencies))
             incs = _apply_title_filter(incs, title_filter)
-            self.app.call_from_thread(self._populate_table, incs, inc_scope, title_filter)
+            app.call_from_thread(self._populate_table, incs, inc_scope, title_filter)
         except Exception as e:
             logger.exception("Error loading incidents")
-            self.app.call_from_thread(self._set_error, str(e))
+            app.call_from_thread(self._set_error, str(e))
 
     def _set_loading(self) -> None:
         self.query_one("#status-bar", StatusBar).set_loading()
@@ -331,7 +347,7 @@ class IncidentsScreen(Screen):
 
     def action_select_columns(self) -> None:
         self.app.push_screen(
-            FieldSelectorScreen(self._visible_columns),
+            ColumnSelectorScreen(self._visible_columns),
             self._apply_column_selection,
         )
 
@@ -371,14 +387,13 @@ class IncidentsScreen(Screen):
                 lambda duration: self._do_snooze(incs, duration) if duration else None,
             )
 
-    def action_open_detail(self) -> None:
-        filter_input = self.query_one("#title-filter", Input)
-        if filter_input.display and filter_input.has_focus:
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.data_table.id != "incidents-table":
             return
-        table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
-            self.app.push_screen(IncidentDetailScreen(self._incident_ids[row_idx]))
+        incident_id = str(event.row_key.value)
+        inc = self._incidents_cache.get(incident_id)
+        if inc is not None:
+            self.app.push_screen(IncidentDetailScreen(inc))
 
     def action_cycle_scope(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_scope()
@@ -399,76 +414,61 @@ class IncidentsScreen(Screen):
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:
-        cfg = self.app.cfg
+        app = self.app
         try:
-            PagerDuty(cfg).incidents.ack(incs)
+            app.pd.incidents.ack(incs)
             logger.info("Acked %d incidents", len(incs))
         except Exception as e:
             logger.exception("Error acking incidents")
-            self.app.call_from_thread(self._set_error, str(e))
+            app.call_from_thread(self._set_error, str(e))
             return
-        self.app.call_from_thread(self.load_incidents)
+        app.call_from_thread(self.load_incidents)
 
     @work(thread=True)
     def _do_resolve(self, incs: list[dict]) -> None:
-        cfg = self.app.cfg
+        app = self.app
         try:
-            PagerDuty(cfg).incidents.resolve(incs)
+            app.pd.incidents.resolve(incs)
             logger.info("Resolved %d incidents", len(incs))
         except Exception as e:
             logger.exception("Error resolving incidents")
-            self.app.call_from_thread(self._set_error, str(e))
+            app.call_from_thread(self._set_error, str(e))
             return
-        self.app.call_from_thread(self.load_incidents)
+        app.call_from_thread(self.load_incidents)
 
     @work(thread=True)
     def _do_snooze(self, incs: list[dict], duration: int) -> None:
-        cfg = self.app.cfg
+        app = self.app
         try:
-            PagerDuty(cfg).incidents.snooze(incs, duration)
+            app.pd.incidents.snooze(incs, duration)
             logger.info("Snoozed %d incidents for %ds", len(incs), duration)
         except Exception as e:
             logger.exception("Error snoozing incidents")
-            self.app.call_from_thread(self._set_error, str(e))
+            app.call_from_thread(self._set_error, str(e))
             return
-        self.app.call_from_thread(self.load_incidents)
+        app.call_from_thread(self.load_incidents)
 
 
 class IncidentDetailScreen(Screen):
     BINDINGS = [("escape", "app.pop_screen", "Back")]
 
-    def __init__(self, incident_id: str) -> None:
+    def __init__(self, inc: dict) -> None:
         super().__init__()
-        self._incident_id = incident_id
+        self._inc = inc
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with ScrollableContainer():
-            yield Static(id="incident-info")
-            yield DataTable(id="alerts-table", zebra_stripes=True)
+        yield Static(id="incident-info")
+        yield DataTable(id="alerts-table", zebra_stripes=True)
         yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one("#alerts-table", DataTable)
         table.add_columns("ID", "Summary", "Status", "Age")
-        self.load_detail()
+        self._populate_info(self._inc)
+        self.load_alerts()
 
-    @work(exclusive=True, thread=True)
-    def load_detail(self) -> None:
-        cfg = self.app.cfg
-        try:
-            pd_client = PagerDuty(cfg)
-            inc = pd_client.incidents.get(self._incident_id)
-            alerts_data = pd_client.incidents.alerts(self._incident_id)
-            self.app.call_from_thread(self._populate_detail, inc, alerts_data)
-        except Exception as e:
-            logger.exception("Error loading incident detail")
-            self.app.call_from_thread(
-                self.query_one("#incident-info", Static).update,
-                f"[red]Error loading incident: {e}[/red]",
-            )
-
-    def _populate_detail(self, inc: dict, alerts_data: Any) -> None:
+    def _populate_info(self, inc: dict) -> None:
         status = inc.get("status", "")
         urgency = inc.get("urgency", "")
         assignees = ", ".join(a["assignee"]["summary"] for a in inc.get("assignments", []))
@@ -488,8 +488,18 @@ class IncidentDetailScreen(Screen):
         )
         self.query_one("#incident-info", Static).update(info)
 
+    @work(exclusive=True, thread=True)
+    def load_alerts(self) -> None:
+        app = self.app
+        try:
+            alerts_data = app.pd.incidents.alerts(self._inc["id"])
+            alerts = alerts_data if isinstance(alerts_data, list) else alerts_data.get("alerts", [])
+            app.call_from_thread(self._populate_alerts, alerts)
+        except Exception:
+            logger.exception("Error loading alerts")
+
+    def _populate_alerts(self, alerts: list) -> None:
         table = self.query_one("#alerts-table", DataTable)
-        alerts = alerts_data if isinstance(alerts_data, list) else alerts_data.get("alerts", [])
         for alert in alerts:
             table.add_row(
                 alert.get("id", ""),

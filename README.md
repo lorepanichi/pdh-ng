@@ -79,4 +79,8 @@ pdh-ng
 
 ## UI preferences
 
-Column visibility is persisted to `~/.local/state/pdh-ng/ui.yaml`.
+Column visibility, incidents scope, status, urgency and refresh time are all persisted to `~/.local/state/pdh-ng/ui.yaml`.
+
+Changing incident scope, status, urgency - or refresh interval - resets the auto-refresh timer (next fetch starts a full interval from that moment).
+
+Changing visible columns only re-renders already-fetched data from memory — no API call, no timer reset.

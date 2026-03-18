@@ -284,26 +284,19 @@ class TestTeams:
 
 class TestPagerDuty:
     def test_init_success(self, cfg, mock_session):
-        mock_session.rget.side_effect = [{"abilities": []}, {"id": "U1"}]
+        mock_session.rget.return_value = {"abilities": []}
         with patch("pdh_ng.pd.RestApiV2Client", return_value=mock_session):
             pd = PagerDuty(cfg)
         assert pd.users is not None
         assert pd.incidents is not None
         assert pd.services is not None
         assert pd.teams is not None
-        assert pd.me == {"id": "U1"}
 
     def test_init_unauthorized_raises(self, cfg, mock_session):
         mock_session.rget.side_effect = Error("401 Unauthorized")
         with patch("pdh_ng.pd.RestApiV2Client", return_value=mock_session):
             with pytest.raises(UnauthorizedException):
                 PagerDuty(cfg)
-
-    def test_init_me_failure_falls_back_to_empty(self, cfg, mock_session):
-        mock_session.rget.side_effect = [{"abilities": []}, Error("not found")]
-        with patch("pdh_ng.pd.RestApiV2Client", return_value=mock_session):
-            pd = PagerDuty(cfg)
-        assert pd.me == {}
 
     def test_constants_exposed(self):
         assert PagerDuty.INCIDENT_STATUS_TRIGGERED == STATUS_TRIGGERED

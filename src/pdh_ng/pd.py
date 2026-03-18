@@ -49,13 +49,9 @@ class PagerDuty:
         self.incidents = Incidents(self.cfg, self.session)
         self.teams = Teams(self.cfg, self.session)
         try:
-            self.abilities: list | dict = self.session.rget("/abilities")
+            self.session.rget("/abilities")
         except Error as e:
             raise UnauthorizedException(str(e))
-        try:
-            self.me: list[Any] | dict[Any, Any] = self.session.rget("/users/me")
-        except Error:
-            self.me = {}
 
 
 class Incidents:

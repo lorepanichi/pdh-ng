@@ -1,5 +1,6 @@
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
@@ -26,16 +27,19 @@ from .constants import (
 
 
 class StatusBar(Horizontal):
-    class FiltersChanged(Message):
-        def __init__(
-            self,
-            inc_scope: IncScope,
-            inc_status: IncStatus,
-            inc_urgency: IncUrgency,
-        ) -> None:
+    class ScopeChanged(Message):
+        def __init__(self, inc_scope: IncScope) -> None:
             super().__init__()
             self.inc_scope = inc_scope
+
+    class StatusChanged(Message):
+        def __init__(self, inc_status: IncStatus) -> None:
+            super().__init__()
             self.inc_status = inc_status
+
+    class UrgencyChanged(Message):
+        def __init__(self, inc_urgency: IncUrgency) -> None:
+            super().__init__()
             self.inc_urgency = inc_urgency
 
     class RefreshTimeChanged(Message):
@@ -68,15 +72,15 @@ class StatusBar(Horizontal):
             flat=True,
         )
         yield Button(
-            _REFRESH_TIME_LABELS[self._refresh_time],
-            id="refresh-btn",
+            _INC_URGENCY_LABELS[self._inc_urgency],
+            id="urgency-btn",
+            variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
             compact=True,
             flat=True,
         )
         yield Button(
-            _INC_URGENCY_LABELS[self._inc_urgency],
-            id="urgency-btn",
-            variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
+            _REFRESH_TIME_LABELS[self._refresh_time],
+            id="refresh-btn",
             compact=True,
             flat=True,
         )
@@ -108,19 +112,19 @@ class StatusBar(Horizontal):
         idx = _INC_SCOPE_CYCLE.index(self._inc_scope)
         self._inc_scope = _INC_SCOPE_CYCLE[(idx + 1) % len(_INC_SCOPE_CYCLE)]
         self._sync_buttons()
-        self._emit()
+        self.post_message(self.ScopeChanged(self._inc_scope))
 
     def cycle_status(self) -> None:
         idx = _INC_STATUS_CYCLE.index(self._inc_status)
         self._inc_status = _INC_STATUS_CYCLE[(idx + 1) % len(_INC_STATUS_CYCLE)]
         self._sync_buttons()
-        self._emit()
+        self.post_message(self.StatusChanged(self._inc_status))
 
     def cycle_urgency(self) -> None:
         idx = _INC_URGENCY_CYCLE.index(self._inc_urgency)
         self._inc_urgency = _INC_URGENCY_CYCLE[(idx + 1) % len(_INC_URGENCY_CYCLE)]
         self._sync_buttons()
-        self._emit()
+        self.post_message(self.UrgencyChanged(self._inc_urgency))
 
     def cycle_refresh(self) -> None:
         idx = _REFRESH_TIME_CYCLE.index(self._refresh_time)
@@ -144,20 +148,11 @@ class StatusBar(Horizontal):
     def _on_refresh_btn(self) -> None:
         self.cycle_refresh()
 
-    def _emit(self) -> None:
-        self.post_message(
-            self.FiltersChanged(
-                inc_scope=self._inc_scope,
-                inc_status=self._inc_status,
-                inc_urgency=self._inc_urgency,
-            )
-        )
 
-
-class FieldSelectorScreen(ModalScreen):
+class ColumnSelectorScreen(ModalScreen):
     BINDINGS = [
         ("escape", "cancel", "Cancel"),
-        ("ctrl+s", "confirm", "Apply"),
+        Binding("enter", "confirm", "Apply", priority=True),
     ]
 
     def __init__(self, visible_columns: list[str]) -> None:
@@ -166,7 +161,7 @@ class FieldSelectorScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="field-selector-dialog"):
-            yield Label("Select columns [dim] space = toggle  ctrl+s = apply  esc = cancel[/dim]")
+            yield Label("Select columns [dim] space = toggle  enter = apply  esc = cancel[/dim]")
             selections = [
                 Selection(col, col, initial_state=col in self._visible_columns)
                 for col in ALL_COLUMNS

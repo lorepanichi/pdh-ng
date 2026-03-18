@@ -8,7 +8,8 @@ import yaml
 from textual.app import App
 
 from ..config import Config
-from .constants import ALL_COLUMNS, DEFAULT_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
+from ..pd import PagerDuty
+from .constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from .screens import IncidentsScreen
 
 logger = logging.getLogger("pdh-ng.tui")
@@ -27,6 +28,7 @@ class TuiApp(App):
     def __init__(self, cfg: Config) -> None:
         super().__init__()
         self.cfg = cfg
+        self.pd = PagerDuty(cfg)
         self._prefs_path = _PREFS_PATH.expanduser()
         self._prefs: dict = self._load_prefs()
         self._setup_logging()
@@ -62,7 +64,7 @@ class TuiApp(App):
 
     @property
     def visible_columns(self) -> list[str]:
-        cols = self._prefs.get("visible_columns", list(DEFAULT_COLUMNS))
+        cols = self._prefs.get("visible_columns", list(ALL_COLUMNS))
         return [c for c in cols if c in ALL_COLUMNS]
 
     @visible_columns.setter

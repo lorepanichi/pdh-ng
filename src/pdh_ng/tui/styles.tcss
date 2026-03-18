@@ -39,7 +39,7 @@ StatusBar Label {
     padding: 0 1;
 }
 
-FieldSelectorScreen {
+ColumnSelectorScreen {
     align: center middle;
 }
 
@@ -115,16 +115,12 @@ ConfirmDialog {
     margin: 0 1;
 }
 
-IncidentDetailScreen ScrollableContainer {
-    height: 1fr;
-    padding: 1 2;
-}
-
 #incident-info {
-    margin-bottom: 1;
+    margin: 1 2;
+    height: auto;
 }
 
 #alerts-table {
-    height: auto;
-    min-height: 8;
+    height: 1fr;
+    margin: 0 2;
 }

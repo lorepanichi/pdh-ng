@@ -1,9 +1,11 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 import yaml
 
 from pdh_ng.config import DEFAULTS, Config
 from pdh_ng.tui.app import TuiApp
-from pdh_ng.tui.constants import DEFAULT_COLUMNS, IncScope, IncStatus, RefreshTime
+from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, RefreshTime
 
 
 @pytest.fixture
@@ -19,7 +21,8 @@ def cfg():
 
 @pytest.fixture
 def app(cfg, tmp_path):
-    a = TuiApp(cfg=cfg)
+    with patch("pdh_ng.tui.app.PagerDuty", return_value=MagicMock()):
+        a = TuiApp(cfg=cfg)
     a._prefs_path = tmp_path / "ui.yaml"
     a._prefs = a._load_prefs()
     return a
@@ -27,7 +30,7 @@ def app(cfg, tmp_path):
 
 class TestVisibleColumns:
     def test_defaults_when_no_prefs_file(self, app):
-        assert app.visible_columns == list(DEFAULT_COLUMNS)
+        assert app.visible_columns == list(ALL_COLUMNS)
 
     def test_loads_columns_from_prefs(self, app, tmp_path):
         prefs_file = tmp_path / "ui.yaml"
@@ -67,7 +70,8 @@ class TestPrefsIO:
         assert result == {}
 
     def test_save_creates_parent_dirs(self, cfg, tmp_path):
-        a = TuiApp(cfg=cfg)
+        with patch("pdh_ng.tui.app.PagerDuty", return_value=MagicMock()):
+            a = TuiApp(cfg=cfg)
         a._prefs_path = tmp_path / "nested" / "dir" / "ui.yaml"
         a._prefs = {"visible_columns": ["id"]}
         a.save_prefs()
@@ -130,7 +134,8 @@ class TestRefreshTimePrefs:
 
 class TestTuiAppInit:
     def test_cfg_stored(self, cfg):
-        app = TuiApp(cfg=cfg)
+        with patch("pdh_ng.tui.app.PagerDuty", return_value=MagicMock()):
+            app = TuiApp(cfg=cfg)
         assert app.cfg is cfg
 
     def test_title(self, cfg):

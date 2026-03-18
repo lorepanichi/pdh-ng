@@ -11,7 +11,7 @@ from pdh_ng.tui.constants import (
     _REFRESH_TIME_CYCLE,
     _REFRESH_TIME_LABELS,
 )
-from pdh_ng.tui.widgets import ConfirmDialog, FieldSelectorScreen, SnoozeDialog, StatusBar
+from pdh_ng.tui.widgets import ConfirmDialog, ColumnSelectorScreen, SnoozeDialog, StatusBar
 
 
 class StatusBarApp(App):
@@ -20,10 +20,22 @@ class StatusBarApp(App):
     def __init__(self, inc_scope=IncScope.MINE):
         super().__init__()
         self._inc_scope = inc_scope
+        self.received_scopes: list[IncScope] = []
+        self.received_statuses: list[IncStatus] = []
+        self.received_urgencies: list[IncUrgency] = []
         self.received_refresh_times: list[RefreshTime] = []
 
     def compose(self) -> ComposeResult:
         yield StatusBar(inc_scope=self._inc_scope, id="status-bar")
+
+    def on_status_bar_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
+        self.received_scopes.append(event.inc_scope)
+
+    def on_status_bar_status_changed(self, event: StatusBar.StatusChanged) -> None:
+        self.received_statuses.append(event.inc_status)
+
+    def on_status_bar_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
+        self.received_urgencies.append(event.inc_urgency)
 
     def on_status_bar_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
         self.received_refresh_times.append(event.refresh_time)
@@ -177,6 +189,27 @@ class TestStatusBar:
             bar = pilot.app.query_one("#status-bar", StatusBar)
             assert bar._refresh_time == RefreshTime.S10
 
+    async def test_scope_changed_message(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_scope()
+            await pilot.pause()
+            assert pilot.app.received_scopes == [IncScope.TEAM]
+
+    async def test_status_changed_message(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_status()
+            await pilot.pause()
+            assert pilot.app.received_statuses == [IncStatus.TRIGGERED]
+
+    async def test_urgency_changed_message(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_urgency()
+            await pilot.pause()
+            assert pilot.app.received_urgencies == [IncUrgency.HIGH]
+
     async def test_refresh_time_changed_message(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
@@ -274,22 +307,22 @@ class TestConfirmDialog:
             assert "Delete incident?" in str(label.render())
 
 
-class TestFieldSelectorScreen:
+class TestColumnSelectorScreen:
     async def test_escape_dismisses_none(self):
-        async with ModalApp(FieldSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
+        async with ModalApp(ColumnSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
             await pilot.press("escape")
             await pilot.pause()
         assert pilot.app.result is None
 
     async def test_all_columns_shown(self):
-        async with ModalApp(FieldSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
+        async with ModalApp(ColumnSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
             await pilot.pause()
             selection_list = pilot.app.screen.query_one("#field-selector-list", SelectionList)
             assert len(list(selection_list._options)) == len(ALL_COLUMNS)
 
     async def test_confirm_returns_selected(self):
-        async with ModalApp(FieldSelectorScreen(["id", "title"])).run_test() as pilot:
-            await pilot.press("ctrl+s")
+        async with ModalApp(ColumnSelectorScreen(["id", "title"])).run_test() as pilot:
+            await pilot.press("enter")
             await pilot.pause()
         assert pilot.app.result is not None
         assert "id" in pilot.app.result
@@ -297,15 +330,15 @@ class TestFieldSelectorScreen:
 
     async def test_confirm_preserves_all_columns_order(self):
         """Regression: re-enabling a column must not move it to the end."""
-        async with ModalApp(FieldSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
-            await pilot.press("ctrl+s")
+        async with ModalApp(ColumnSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
+            await pilot.press("enter")
             await pilot.pause()
         assert pilot.app.result == ALL_COLUMNS
 
     async def test_confirm_subset_preserves_order(self):
         subset = ["title", "status", "age"]  # non-contiguous slice of ALL_COLUMNS
-        async with ModalApp(FieldSelectorScreen(subset)).run_test() as pilot:
-            await pilot.press("ctrl+s")
+        async with ModalApp(ColumnSelectorScreen(subset)).run_test() as pilot:
+            await pilot.press("enter")
             await pilot.pause()
         result = pilot.app.result
         assert result is not None

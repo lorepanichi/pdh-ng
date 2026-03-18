@@ -13,7 +13,7 @@ src/pdh_ng/
     ├── app.py        # TuiApp(App) — holds cfg, UI prefs, logging setup
     ├── constants.py  # IncScope, IncStatus, IncUrgency, RefreshTime enums + cycle/label/API lookup tables
     ├── screens.py    # IncidentsScreen, IncidentDetailScreen
-    ├── widgets.py    # StatusBar, FieldSelectorScreen, SnoozeDialog, ConfirmDialog
+    ├── widgets.py    # StatusBar, ColumnSelectorScreen, SnoozeDialog, ConfirmDialog
     └── styles.tcss   # Textual CSS
 
 tests/
@@ -30,6 +30,14 @@ tests/
 ```sh
 uv sync
 uv run pdh-ng
+```
+
+## Testing
+
+Always run tests after making changes:
+
+```sh
+uv run pytest tests/ -q
 ```
 
 ## CLI (`main.py`)
@@ -54,11 +62,11 @@ uv run pdh-ng
 
 ## Key architecture decisions
 
-### TUI calls pd.py directly
-The TUI constructs `PagerDuty(cfg)` directly and calls `.incidents`, `.users`, `.services`, `.teams` sub-objects.
+### Shared PagerDuty client
+`TuiApp` holds a single `PagerDuty` instance at `self.pd`, created in `__init__`. All workers reuse it via `app.pd` — no per-request client construction. `PagerDuty.__init__` calls `/abilities` once (auth check) and nothing else.
 
 ### Textual threading
-All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from workers must use `self.app.call_from_thread(...)` — NOT `self.call_from_thread()` (moved to App-only in Textual 6).
+All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from workers must use `app.call_from_thread(...)` where `app` is captured as `app = self.app` at the **very first line** of the worker — before any network calls. `self.app` is a ContextVar lookup that can fail mid-execution after asyncio context changes; a local variable avoids this. Do NOT use `self.call_from_thread()` (moved to App-only in Textual 6).
 
 ### Column widths
 `DataTable.clear(columns=True)` + `add_columns()` must be called on every reload to prevent stale column widths when data changes.
@@ -79,12 +87,12 @@ The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, 
 `StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains four cycling buttons:
 - `1` / click: cycles scope `mine → team → all`
 - `2` / click: cycles status filter `all statuses → triggered → ack'd`
-- `3` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
-- `4` / click: cycles urgency filter `all urgencies → high → low`
+- `3` / click: cycles urgency filter `all urgencies → high → low`
+- `4` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
 
 The count label shows `N incident(s)` and appends `↻` while a refresh is in progress (preserving the last count).
 
-`FiltersChanged` message carries `inc_scope: IncScope`, `inc_status: IncStatus`, and `inc_urgency: IncUrgency`. Receivers derive API strings via `_INC_STATUS_API[inc_status]` and `_INC_URGENCY_API[inc_urgency]`. `RefreshTimeChanged` carries `refresh_time: RefreshTime`.
+Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc_status)`, `UrgencyChanged(inc_urgency)`, `RefreshTimeChanged(refresh_time)`. Receivers for filter messages derive API strings via `_INC_STATUS_API[inc_status]` and `_INC_URGENCY_API[inc_urgency]`.
 
 ### Scope modes
 - `IncScope.MINE`: `pd.incidents.mine()`
@@ -92,7 +100,9 @@ The count label shows `N incident(s)` and appends `↻` while a refresh is in pr
 - `IncScope.ALL`: `pd.incidents.fetch()`
 
 ### Auto-refresh
-`IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s. Changing filters resets the timer but does not trigger an immediate reload. Timer is managed via `_schedule_next_refresh()` called at the end of `_populate_table` and `_set_error`.
+`IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s. Changing filters resets the timer but does not trigger an immediate reload. Timer is managed via `_schedule_next_refresh()` called at the end of `_populate_table` and `_set_error`. `_schedule_next_refresh` checks `_suspended` and skips scheduling while the screen is suspended.
+
+`on_screen_suspend` sets `_suspended = True` and cancels any live timer. `on_screen_resume` clears `_suspended` and calls `_schedule_next_refresh()`. This stops all API calls while `IncidentDetailScreen` is open.
 
 ### Persistent UI prefs
 `TuiApp` reads/writes `~/.local/state/pdh-ng/ui.yaml` (path constant: `_PREFS_PATH`). Stored keys:
@@ -124,7 +134,8 @@ Currently running **Textual 8.x** (requires `rich>=14.2.0`). Key API notes:
 - `ModalScreen.dismiss(value)` passes value to the `push_screen` callback
 - Bindings use `Binding(key, action, description, show=False)` to hide from footer
 - `set_timer(interval, cb)` fires once after `interval` seconds (one-shot); `set_interval` is repeating
-- `DataTable` (7.5.0+): fires `Selected` only when the row is **already highlighted** — clicking an un-highlighted row first highlights it; selection fires on the second click
+- `DataTable` (7.5.0+): fires `RowSelected` only when the row is **already highlighted** — clicking an un-highlighted row first highlights it; selection fires on the second click. Handle via `on_data_table_row_selected` method (not `@on` decorator with CSS selector — unreliable in 8.x). `DataTable` consumes `enter` internally so screen-level `enter` bindings are never reached.
+- `Static` with `height: auto` inside `ScrollableContainer` does not size correctly in Textual 8.x — lay out `Static` and `DataTable` directly in the `Screen` instead.
 
 ## Dependencies
 

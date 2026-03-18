@@ -12,7 +12,7 @@ from pdh_ng.tui.screens import (
     _fmt_age,
     _urgency_marker,
 )
-from pdh_ng.tui.constants import DEFAULT_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
+from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.widgets import StatusBar
 
 
@@ -177,7 +177,7 @@ class _IncidentsApp(App):
         super().__init__()
         self.cfg = {"apikey": "x", "uid": "U1", "email": "a@b.com"}
         self._prefs = prefs or {}
-        self.visible_columns = DEFAULT_COLUMNS[:]
+        self.visible_columns = ALL_COLUMNS[:]
         self.refresh_time = RefreshTime.S5
         self._prefs_saved: dict | None = None
 
@@ -305,19 +305,25 @@ class TestIncidentsScreenStatePrefs:
                 screen.on_unmount()
             assert app._prefs_saved is not None
 
-    async def test_filters_changed_persists_scope_status_and_urgency(self):
+    async def test_scope_changed_persists(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._on_filters_changed(
-                    StatusBar.FiltersChanged(
-                        inc_scope=IncScope.ALL,
-                        inc_status=IncStatus.TRIGGERED,
-                        inc_urgency=IncUrgency.HIGH,
-                    )
-                )
+                screen._on_scope_changed(StatusBar.ScopeChanged(inc_scope=IncScope.ALL))
                 assert pilot.app._prefs.get("inc_scope") == int(IncScope.ALL)
+
+    async def test_status_changed_persists(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._on_status_changed(StatusBar.StatusChanged(inc_status=IncStatus.TRIGGERED))
                 assert pilot.app._prefs.get("inc_status") == int(IncStatus.TRIGGERED)
+
+    async def test_urgency_changed_persists(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._on_urgency_changed(StatusBar.UrgencyChanged(inc_urgency=IncUrgency.HIGH))
                 assert pilot.app._prefs.get("inc_urgency") == int(IncUrgency.HIGH)
 
     async def test_apply_column_selection_uses_scope(self):
