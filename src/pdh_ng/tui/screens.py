@@ -15,6 +15,14 @@ from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from ..pd import STATUS_ACK, STATUS_TRIGGERED, PagerDuty
+from .constants import (
+    _INC_STATUS_API,
+    _INC_URGENCY_API,
+    IncScope,
+    IncStatus,
+    IncUrgency,
+    RefreshTime,
+)
 from .widgets import ConfirmDialog, FieldSelectorScreen, SnoozeDialog, StatusBar
 
 logger = logging.getLogger("pdh-ng.tui")
@@ -93,6 +101,7 @@ class IncidentsScreen(Screen):
         Binding("1", "cycle_scope", "scope filter", show=False),
         Binding("2", "cycle_status", "status filter", show=False),
         Binding("3", "cycle_refresh", "refresh interval", show=False),
+        Binding("4", "cycle_urgency", "urgency filter", show=False),
         ("a", "ack_selected", "Ack"),
         ("r", "resolve_selected", "Resolve"),
         ("s", "snooze_selected", "Snooze"),
@@ -105,19 +114,19 @@ class IncidentsScreen(Screen):
 
     SUB_TITLE = "Incidents"
 
-    def __init__(self, show_all: bool = False) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._show_all = show_all
-        self._scope: str = "all" if show_all else "mine"
+        self._inc_scope: IncScope = IncScope.MINE
+        self._inc_status: IncStatus = IncStatus.ALL
+        self._inc_urgency: IncUrgency = IncUrgency.ALL
         self._current_statuses: list[str] = [STATUS_TRIGGERED, STATUS_ACK]
-        self._current_urgencies: list[str] = ["high", "low"]
+        self._current_urgencies: list[str] = _INC_URGENCY_API[IncUrgency.ALL]
         self._title_filter: str = ""
         self._incident_ids: list[str] = []
         self._incidents_cache: dict[str, dict] = {}
         self._selected_ids: set[str] = set()
         self._visible_columns: list[str] = []  # loaded from app prefs on mount
-        self._status_mode: str = "all"
-        self._refresh_interval: int = 5
+        self._refresh_time: RefreshTime = RefreshTime.S5
         self._refresh_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
@@ -126,54 +135,54 @@ class IncidentsScreen(Screen):
             id="incidents-table",
             cursor_type="row",
             zebra_stripes=True,
+            # this is to make urgency color appear under a cursor highlighted row
             cursor_foreground_priority="renderable",
         )
         yield Input(
             placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel",
             id="title-filter",
         )
-        yield StatusBar(scope=self._scope, id="status-bar")
+        yield StatusBar(id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
-        bar = self.query_one("#status-bar", StatusBar)
-        if not self._show_all:
-            bar._scope = self.app.scope
-        bar._status_mode = self.app.status_mode
-        bar._refresh_interval = self.app.refresh_interval
-        bar._sync_buttons()
-        self._scope = bar._scope
-        self._status_mode = bar._status_mode
-        self._current_statuses = bar._active_statuses()
+        self._inc_scope = self.app.inc_scope
+        self._inc_status = self.app.inc_status
+        self._inc_urgency = self.app.inc_urgency
+        self._refresh_time = self.app.refresh_time
+        self._current_statuses = _INC_STATUS_API[self._inc_status]
+        self._current_urgencies = _INC_URGENCY_API[self._inc_urgency]
         self._visible_columns = self.app.visible_columns
-        self._refresh_interval = bar._refresh_interval
-        self.query_one("#title-filter").display = False
+        bar = self.query_one("#status-bar", StatusBar)
+        bar._inc_scope = self._inc_scope
+        bar._inc_status = self._inc_status
+        bar._inc_urgency = self._inc_urgency
+        bar._refresh_time = self._refresh_time
+        bar._sync_buttons()
         self._rebuild_columns()
         self.load_incidents()
 
     def on_unmount(self) -> None:
-        self.app._prefs["scope"] = self._scope
-        self.app._prefs["status_mode"] = self._status_mode
         self.app.save_prefs()
 
     def _schedule_next_refresh(self) -> None:
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
             self._refresh_timer = None
-        if self._refresh_interval > 0:
-            self._refresh_timer = self.set_timer(self._refresh_interval, self._on_refresh_timer)
+        if self._refresh_time > 0:
+            self._refresh_timer = self.set_timer(self._refresh_time, self._on_refresh_timer)
 
     def _on_refresh_timer(self) -> None:
         self._refresh_timer = None
         self.load_incidents()
 
-    def _start_refresh(self, interval: int) -> None:
-        self._refresh_interval = interval
+    def _start_refresh(self, refresh_time: RefreshTime) -> None:
+        self._refresh_time = refresh_time
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
             self._refresh_timer = None
-        if interval > 0:
-            self._refresh_timer = self.set_timer(interval, self._on_refresh_timer)
+        if refresh_time > 0:
+            self._refresh_timer = self.set_timer(refresh_time, self._on_refresh_timer)
 
     def _rebuild_columns(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
@@ -183,10 +192,14 @@ class IncidentsScreen(Screen):
 
     @on(StatusBar.FiltersChanged)
     def _on_filters_changed(self, event: StatusBar.FiltersChanged) -> None:
-        self._current_statuses = event.statuses
-        self._current_urgencies = event.urgencies
-        self._scope = event.scope
-        self._status_mode = event.status_mode
+        self._current_statuses = _INC_STATUS_API[event.inc_status]
+        self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
+        self._inc_scope = event.inc_scope
+        self._inc_status = event.inc_status
+        self._inc_urgency = event.inc_urgency
+        self.app.inc_scope = event.inc_scope
+        self.app.inc_status = event.inc_status
+        self.app.inc_urgency = event.inc_urgency
         self._schedule_next_refresh()
 
     @on(Input.Submitted, "#title-filter")
@@ -201,14 +214,14 @@ class IncidentsScreen(Screen):
         self.app.call_from_thread(self._set_loading)
         statuses = self._current_statuses
         urgencies = self._current_urgencies
-        scope = self._scope
+        inc_scope = self._inc_scope
         title_filter = self._title_filter
         cfg = self.app.cfg
         try:
             pd_client = PagerDuty(cfg)
-            if scope == "mine":
+            if inc_scope == IncScope.MINE:
                 incs = list(pd_client.incidents.mine(statuses=statuses, urgencies=urgencies))
-            elif scope == "team":
+            elif inc_scope == IncScope.TEAM:
                 user = pd_client.users.get(cfg["uid"])
                 team_ids = [t["id"] for t in user.get("teams", [])]
                 incs = list(
@@ -219,7 +232,7 @@ class IncidentsScreen(Screen):
             else:
                 incs = list(pd_client.incidents.fetch(statuses=statuses, urgencies=urgencies))
             incs = _apply_title_filter(incs, title_filter)
-            self.app.call_from_thread(self._populate_table, incs, scope, title_filter)
+            self.app.call_from_thread(self._populate_table, incs, inc_scope, title_filter)
         except Exception as e:
             logger.exception("Error loading incidents")
             self.app.call_from_thread(self._set_error, str(e))
@@ -231,13 +244,11 @@ class IncidentsScreen(Screen):
         self.query_one("#status-bar", StatusBar).set_error(message)
         self._schedule_next_refresh()
 
-    def _populate_table(self, incs: list, scope: str, title_filter: str) -> None:
+    def _populate_table(self, incs: list, inc_scope: IncScope, title_filter: str) -> None:
         table = self.query_one("#incidents-table", DataTable)
         cursor_row = table.cursor_row
         cursor_id = (
-            self._incident_ids[cursor_row]
-            if 0 <= cursor_row < len(self._incident_ids)
-            else None
+            self._incident_ids[cursor_row] if 0 <= cursor_row < len(self._incident_ids) else None
         )
 
         table.clear(columns=True)
@@ -265,7 +276,9 @@ class IncidentsScreen(Screen):
             except Exception:
                 pass
 
-        self.query_one("#status-bar", StatusBar).set_count(len(incs), title_filter, scope)
+        self.query_one("#status-bar", StatusBar).set_count(
+            len(incs), title_filter, inc_scope.name.lower()
+        )
         self._schedule_next_refresh()
 
     def _get_target_incs(self) -> list[dict]:
@@ -330,7 +343,7 @@ class IncidentsScreen(Screen):
         self._rebuild_columns()
         self._populate_table(
             list(self._incidents_cache.values()),
-            self._scope,
+            self._inc_scope,
             self._title_filter,
         )
 
@@ -376,10 +389,13 @@ class IncidentsScreen(Screen):
     def action_cycle_refresh(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_refresh()
 
-    @on(StatusBar.RefreshIntervalChanged)
-    def _on_refresh_interval_changed(self, event: StatusBar.RefreshIntervalChanged) -> None:
-        self._start_refresh(event.interval)
-        self.app.refresh_interval = event.interval
+    def action_cycle_urgency(self) -> None:
+        self.query_one("#status-bar", StatusBar).cycle_urgency()
+
+    @on(StatusBar.RefreshTimeChanged)
+    def _on_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
+        self._start_refresh(event.refresh_time)
+        self.app.refresh_time = event.refresh_time
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:

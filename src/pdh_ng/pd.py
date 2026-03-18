@@ -4,7 +4,6 @@ from functools import lru_cache
 from typing import Any
 
 from pagerduty import Error, RestApiV2Client
-from rich import print
 
 from .config import Config
 
@@ -107,26 +106,13 @@ class Incidents:
 
     def snooze(self, incs, duration=14400) -> None:
         for i in incs:
-            try:
-                self.session.post(f"/incidents/{i['id']}/snooze", json={"duration": duration})
-            except Exception as e:
-                print(e)
+            self.session.post(f"/incidents/{i['id']}/snooze", json={"duration": duration})
 
     def bulk_update(self, incs):
-        ret = None
-        try:
-            ret = self.session.rput("incidents", json=incs)
-        except Error as e:
-            print(e)
-        return ret
+        return self.session.rput("incidents", json=incs)
 
     def update(self, inc):
-        ret = None
-        try:
-            ret = self.session.rput(f"/incidents/{inc['id']}", json=inc)
-        except Error as e:
-            print(e)
-        return ret
+        return self.session.rput(f"/incidents/{inc['id']}", json=inc)
 
     def reassign(self, incs, uids: list[str]) -> None:
         for i in incs:
@@ -136,10 +122,7 @@ class Incidents:
                 "type": "incident_reference",
                 "assignments": assignments,
             }
-            try:
-                self.session.rput(f"/incidents/{i['id']}", json=new_inc)
-            except Exception as e:
-                print(str(e))
+            self.session.rput(f"/incidents/{i['id']}", json=new_inc)
 
 
 class Users:

@@ -1,33 +1,32 @@
 from textual.app import App, ComposeResult
 from textual.widgets import Label, SelectionList
 
-from pdh_ng.pd import STATUS_ACK, STATUS_TRIGGERED
-from pdh_ng.tui.widgets import (
+from pdh_ng.tui.constants import (
     ALL_COLUMNS,
-    ConfirmDialog,
-    FieldSelectorScreen,
-    SnoozeDialog,
-    StatusBar,
-    _REFRESH_CYCLE,
-    _REFRESH_LABELS,
+    IncScope,
+    IncStatus,
+    IncUrgency,
+    RefreshTime,
+    _INC_URGENCY_LABELS,
+    _REFRESH_TIME_CYCLE,
+    _REFRESH_TIME_LABELS,
 )
+from pdh_ng.tui.widgets import ConfirmDialog, FieldSelectorScreen, SnoozeDialog, StatusBar
 
 
 class StatusBarApp(App):
     CSS = ""
 
-    def __init__(self, scope="mine"):
+    def __init__(self, inc_scope=IncScope.MINE):
         super().__init__()
-        self._scope = scope
-        self.received_intervals: list[int] = []
+        self._inc_scope = inc_scope
+        self.received_refresh_times: list[RefreshTime] = []
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(scope=self._scope, id="status-bar")
+        yield StatusBar(inc_scope=self._inc_scope, id="status-bar")
 
-    def on_status_bar_refresh_interval_changed(
-        self, event: StatusBar.RefreshIntervalChanged
-    ) -> None:
-        self.received_intervals.append(event.interval)
+    def on_status_bar_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
+        self.received_refresh_times.append(event.refresh_time)
 
 
 class ModalApp(App):
@@ -50,54 +49,42 @@ class ModalApp(App):
 
 class TestStatusBar:
     async def test_initial_scope_mine(self):
-        async with StatusBarApp(scope="mine").run_test() as pilot:
+        async with StatusBarApp(inc_scope=IncScope.MINE).run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._scope == "mine"
+            assert bar._inc_scope == IncScope.MINE
 
     async def test_cycle_scope(self):
-        async with StatusBarApp(scope="mine").run_test() as pilot:
+        async with StatusBarApp(inc_scope=IncScope.MINE).run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
             bar.cycle_scope()
-            assert bar._scope == "team"
+            assert bar._inc_scope == IncScope.TEAM
             bar.cycle_scope()
-            assert bar._scope == "all"
+            assert bar._inc_scope == IncScope.ALL
             bar.cycle_scope()
-            assert bar._scope == "mine"
+            assert bar._inc_scope == IncScope.MINE
 
     async def test_cycle_status(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._status_mode == "all"
+            assert bar._inc_status == IncStatus.ALL
             bar.cycle_status()
-            assert bar._status_mode == STATUS_TRIGGERED
+            assert bar._inc_status == IncStatus.TRIGGERED
             bar.cycle_status()
-            assert bar._status_mode == STATUS_ACK
+            assert bar._inc_status == IncStatus.ACK
             bar.cycle_status()
-            assert bar._status_mode == "all"
-
-    async def test_active_statuses_all_mode(self):
-        async with StatusBarApp().run_test() as pilot:
-            bar = pilot.app.query_one("#status-bar", StatusBar)
-            bar._status_mode = "all"
-            assert set(bar._active_statuses()) == {STATUS_TRIGGERED, STATUS_ACK}
-
-    async def test_active_statuses_triggered_mode(self):
-        async with StatusBarApp().run_test() as pilot:
-            bar = pilot.app.query_one("#status-bar", StatusBar)
-            bar._status_mode = STATUS_TRIGGERED
-            assert bar._active_statuses() == [STATUS_TRIGGERED]
+            assert bar._inc_status == IncStatus.ALL
 
     async def test_scope_button_cycles(self):
-        async with StatusBarApp(scope="mine").run_test() as pilot:
+        async with StatusBarApp(inc_scope=IncScope.MINE).run_test() as pilot:
             await pilot.click("#scope-btn")
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._scope == "team"
+            assert bar._inc_scope == IncScope.TEAM
 
     async def test_status_button_cycles(self):
         async with StatusBarApp().run_test() as pilot:
             await pilot.click("#status-btn")
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._status_mode == STATUS_TRIGGERED
+            assert bar._inc_status == IncStatus.TRIGGERED
 
     async def test_set_count(self):
         async with StatusBarApp().run_test() as pilot:
@@ -137,76 +124,102 @@ class TestStatusBar:
             label = bar.query_one("#count-label", Label)
             assert "something went wrong" in str(label.render())
 
-    async def test_default_status_mode(self):
+    async def test_default_inc_status(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._status_mode == "all"
+            assert bar._inc_status == IncStatus.ALL
 
-    async def test_initial_status_mode_from_param(self):
-        app = StatusBarApp()
-        async with app.run_test():
-            pass
-
+    async def test_initial_inc_status_from_param(self):
         class _App(App):
             def compose(self) -> ComposeResult:
-                yield StatusBar(status_mode="triggered", id="status-bar")
+                yield StatusBar(inc_status=IncStatus.TRIGGERED, id="status-bar")
 
         async with _App().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._status_mode == "triggered"
+            assert bar._inc_status == IncStatus.TRIGGERED
 
-    async def test_default_refresh_interval(self):
+    async def test_default_refresh_time(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._refresh_interval == 5
+            assert bar._refresh_time == RefreshTime.S5
 
     async def test_cycle_refresh_full_sequence(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
             bar.cycle_refresh()
-            assert bar._refresh_interval == 10
+            assert bar._refresh_time == RefreshTime.S10
             bar.cycle_refresh()
-            assert bar._refresh_interval == 0
+            assert bar._refresh_time == RefreshTime.OFF
             bar.cycle_refresh()
-            assert bar._refresh_interval == 3
+            assert bar._refresh_time == RefreshTime.S3
             bar.cycle_refresh()
-            assert bar._refresh_interval == 5
+            assert bar._refresh_time == RefreshTime.S5
 
     async def test_cycle_refresh_wraps(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            for _ in range(len(_REFRESH_CYCLE)):
+            for _ in range(len(_REFRESH_TIME_CYCLE)):
                 bar.cycle_refresh()
-            assert bar._refresh_interval == 5
+            assert bar._refresh_time == RefreshTime.S5
 
     async def test_refresh_button_label_updates(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            for expected in [10, 0, 3, 5]:
+            for expected in [RefreshTime.S10, RefreshTime.OFF, RefreshTime.S3, RefreshTime.S5]:
                 bar.cycle_refresh()
                 await pilot.pause()
                 label = str(pilot.app.query_one("#refresh-btn").label)
-                assert label == _REFRESH_LABELS[expected]
+                assert label == _REFRESH_TIME_LABELS[expected]
 
     async def test_refresh_button_click_cycles(self):
         async with StatusBarApp().run_test() as pilot:
             await pilot.click("#refresh-btn")
             bar = pilot.app.query_one("#status-bar", StatusBar)
-            assert bar._refresh_interval == 10
+            assert bar._refresh_time == RefreshTime.S10
 
-    async def test_refresh_interval_changed_message(self):
+    async def test_refresh_time_changed_message(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
             bar.cycle_refresh()
             await pilot.pause()
-            assert pilot.app.received_intervals == [10]
+            assert pilot.app.received_refresh_times == [RefreshTime.S10]
 
     async def test_all_labels_have_refresh_symbol(self):
-        for label in _REFRESH_LABELS.values():
+        for label in _REFRESH_TIME_LABELS.values():
             assert "↻" in label
 
     async def test_off_label(self):
-        assert "off" in _REFRESH_LABELS[0]
+        assert "off" in _REFRESH_TIME_LABELS[RefreshTime.OFF]
+
+    async def test_default_inc_urgency(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._inc_urgency == IncUrgency.ALL
+
+    async def test_cycle_urgency(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.cycle_urgency()
+            assert bar._inc_urgency == IncUrgency.HIGH
+            bar.cycle_urgency()
+            assert bar._inc_urgency == IncUrgency.LOW
+            bar.cycle_urgency()
+            assert bar._inc_urgency == IncUrgency.ALL
+
+    async def test_urgency_button_cycles(self):
+        async with StatusBarApp().run_test() as pilot:
+            await pilot.click("#urgency-btn")
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._inc_urgency == IncUrgency.HIGH
+
+    async def test_urgency_button_label_updates(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            for expected in [IncUrgency.HIGH, IncUrgency.LOW, IncUrgency.ALL]:
+                bar.cycle_urgency()
+                await pilot.pause()
+                label = str(pilot.app.query_one("#urgency-btn").label)
+                assert label == _INC_URGENCY_LABELS[expected]
 
 
 class TestSnoozeDialog:

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import logging
+import platform
 from pathlib import Path
 
 import yaml
 from textual.app import App
 
 from ..config import Config
+from .constants import ALL_COLUMNS, DEFAULT_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from .screens import IncidentsScreen
-from .widgets import ALL_COLUMNS, DEFAULT_COLUMNS
 
 logger = logging.getLogger("pdh-ng.tui")
 
-_PREFS_PATH = Path("~/.local/state/pdh-ng/ui.yaml")
+if platform.system() == "Darwin":
+    _PREFS_PATH = Path("~/Library/Application Support/pdh-ng/ui.yaml")
+else:
+    _PREFS_PATH = Path("~/.local/state/pdh-ng/ui.yaml")
 
 
 class TuiApp(App):
@@ -20,23 +24,22 @@ class TuiApp(App):
     CSS_PATH = "styles.tcss"
     BINDINGS = [("q", "quit", "Quit")]
 
-    def __init__(self, cfg: Config, show_all: bool = False) -> None:
+    def __init__(self, cfg: Config) -> None:
         super().__init__()
         self.cfg = cfg
-        self.show_all = show_all
         self._prefs_path = _PREFS_PATH.expanduser()
         self._prefs: dict = self._load_prefs()
         self._setup_logging()
 
     def _setup_logging(self) -> None:
-        if not self.cfg.get("log_enabled", True):
+        if not self.cfg["log_enabled"]:
             logging.getLogger("pdh-ng").addHandler(logging.NullHandler())
             return
-        log_file = Path(self.cfg.get("log_file", "~/.local/state/pdh-ng/logs/tui.log")).expanduser()
+        log_file = Path(self.cfg["log_file"]).expanduser()
         log_file.parent.mkdir(parents=True, exist_ok=True)
         logging.basicConfig(
             filename=str(log_file),
-            level=getattr(logging, self.cfg.get("log_level", "DEBUG").upper(), logging.DEBUG),
+            level=getattr(logging, self.cfg["log_level"].upper()),
             format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
 
@@ -59,30 +62,44 @@ class TuiApp(App):
 
     @property
     def visible_columns(self) -> list[str]:
-        cols = self._prefs.get("columns", list(DEFAULT_COLUMNS))
+        cols = self._prefs.get("visible_columns", list(DEFAULT_COLUMNS))
         return [c for c in cols if c in ALL_COLUMNS]
 
     @visible_columns.setter
     def visible_columns(self, columns: list[str]) -> None:
-        self._prefs["columns"] = columns
-        self.save_prefs()
+        self._prefs["visible_columns"] = columns
 
     @property
-    def refresh_interval(self) -> int:
-        return self._prefs.get("refresh_interval", 5)
+    def refresh_time(self) -> RefreshTime:
+        return RefreshTime(self._prefs.get("refresh_time", RefreshTime.S5))
 
-    @refresh_interval.setter
-    def refresh_interval(self, interval: int) -> None:
-        self._prefs["refresh_interval"] = interval
-        self.save_prefs()
-
-    @property
-    def scope(self) -> str:
-        return self._prefs.get("scope", "mine")
+    @refresh_time.setter
+    def refresh_time(self, value: RefreshTime) -> None:
+        self._prefs["refresh_time"] = int(value)
 
     @property
-    def status_mode(self) -> str:
-        return self._prefs.get("status_mode", "all")
+    def inc_scope(self) -> IncScope:
+        return IncScope(self._prefs.get("inc_scope", IncScope.MINE))
+
+    @inc_scope.setter
+    def inc_scope(self, value: IncScope) -> None:
+        self._prefs["inc_scope"] = int(value)
+
+    @property
+    def inc_status(self) -> IncStatus:
+        return IncStatus(self._prefs.get("inc_status", IncStatus.ALL))
+
+    @inc_status.setter
+    def inc_status(self, value: IncStatus) -> None:
+        self._prefs["inc_status"] = int(value)
+
+    @property
+    def inc_urgency(self) -> IncUrgency:
+        return IncUrgency(self._prefs.get("inc_urgency", IncUrgency.ALL))
+
+    @inc_urgency.setter
+    def inc_urgency(self, value: IncUrgency) -> None:
+        self._prefs["inc_urgency"] = int(value)
 
     def on_mount(self) -> None:
-        self.push_screen(IncidentsScreen(show_all=self.show_all))
+        self.push_screen(IncidentsScreen())

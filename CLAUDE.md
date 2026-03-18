@@ -11,6 +11,7 @@ src/pdh_ng/
 ├── main.py           # Entry point — loads config and launches TuiApp
 └── tui/
     ├── app.py        # TuiApp(App) — holds cfg, UI prefs, logging setup
+    ├── constants.py  # IncScope, IncStatus, IncUrgency, RefreshTime enums + cycle/label/API lookup tables
     ├── screens.py    # IncidentsScreen, IncidentDetailScreen
     ├── widgets.py    # StatusBar, FieldSelectorScreen, SnoozeDialog, ConfirmDialog
     └── styles.tcss   # Textual CSS
@@ -75,31 +76,33 @@ The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, 
 `_populate_table` snapshots `cursor_id` (the incident ID at the current cursor row) before clearing the table, then restores via `table.get_row_index(cursor_id)` + `table.move_cursor()` after repopulating. `_selected_ids` is reconciled with the new dataset (`&=` set intersection) rather than cleared, and surviving selections have their marker cells repainted.
 
 ### Status bar
-`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains three cycling buttons:
+`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains four cycling buttons:
 - `1` / click: cycles scope `mine → team → all`
 - `2` / click: cycles status filter `all statuses → triggered → ack'd`
 - `3` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
+- `4` / click: cycles urgency filter `all urgencies → high → low`
 
 The count label shows `N incident(s)` and appends `↻` while a refresh is in progress (preserving the last count).
 
-`FiltersChanged` message carries `statuses`, `urgencies`, `scope`, and `status_mode`.
+`FiltersChanged` message carries `inc_scope: IncScope`, `inc_status: IncStatus`, and `inc_urgency: IncUrgency`. Receivers derive API strings via `_INC_STATUS_API[inc_status]` and `_INC_URGENCY_API[inc_urgency]`. `RefreshTimeChanged` carries `refresh_time: RefreshTime`.
 
 ### Scope modes
-- `mine`: `pd.incidents.mine()`
-- `team`: `pd.users.get(cfg["uid"])` → extract team IDs → `pd.incidents.fetch(teams=[...])`
-- `all`: `pd.incidents.fetch()`
+- `IncScope.MINE`: `pd.incidents.mine()`
+- `IncScope.TEAM`: `pd.users.get(cfg["uid"])` → extract team IDs → `pd.incidents.fetch(teams=[...])`
+- `IncScope.ALL`: `pd.incidents.fetch()`
 
 ### Auto-refresh
 `IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s. Changing filters resets the timer but does not trigger an immediate reload. Timer is managed via `_schedule_next_refresh()` called at the end of `_populate_table` and `_set_error`.
 
 ### Persistent UI prefs
 `TuiApp` reads/writes `~/.local/state/pdh-ng/ui.yaml` (path constant: `_PREFS_PATH`). Stored keys:
-- `columns` — visible column list (filtered against `ALL_COLUMNS` on load)
-- `refresh_interval` — saved on every change
-- `scope` — saved on app exit (`IncidentsScreen.on_unmount`)
-- `status_mode` — saved on app exit (`IncidentsScreen.on_unmount`)
+- `visible_columns` — visible column list (filtered against `ALL_COLUMNS` on load)
+- `inc_scope` — stored as int (`IncScope` value)
+- `inc_status` — stored as int (`IncStatus` value)
+- `inc_urgency` — stored as int (`IncUrgency` value)
+- `refresh_time` — stored as int (`RefreshTime` value, i.e. seconds)
 
-`TuiApp` exposes: `visible_columns` (r/w property), `refresh_interval` (r/w property), `scope` (r/o property), `status_mode` (r/o property).
+All five are r/w properties on `TuiApp`. Setters write to `_prefs` in memory only; `save_prefs()` is called once in `IncidentsScreen.on_unmount`. `inc_scope`, `inc_status`, and `inc_urgency` are updated immediately in `_on_filters_changed`; `refresh_time` in `_on_refresh_time_changed`.
 
 ### Logging
 Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config keys `log_enabled`, `log_file`, `log_level`. If disabled, adds `NullHandler` to suppress output.
@@ -111,17 +114,18 @@ Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config
 Do NOT access `self.app` inside `IncidentsScreen.compose()` — the screen may be embedded as a widget in tests before the app reference is fully wired. Read all prefs in `on_mount()` instead.
 
 ### on_unmount caveat
-In `on_unmount`, children are already removed — `query_one` will raise `NoMatches`. Track mutable state as screen fields (`self._scope`, `self._status_mode`) updated via event handlers, and save those directly in `on_unmount`.
+In `on_unmount`, children are already removed — `query_one` will raise `NoMatches`. Track mutable state as screen fields (`self._inc_scope`, `self._inc_status`, `self._inc_urgency`) updated via event handlers. `on_unmount` only calls `self.app.save_prefs()` — it does not write to `_prefs` directly.
 
 ## Textual version
 
-Currently running **Textual 6.x**. Key API notes:
+Currently running **Textual 8.x** (requires `rich>=14.2.0`). Key API notes:
 - `call_from_thread` lives on `App` only, not `Widget`/`Screen`
 - `Button(compact=True, flat=True)` for inline status bar buttons
 - `ModalScreen.dismiss(value)` passes value to the `push_screen` callback
 - Bindings use `Binding(key, action, description, show=False)` to hide from footer
 - `set_timer(interval, cb)` fires once after `interval` seconds (one-shot); `set_interval` is repeating
+- `DataTable` (7.5.0+): fires `Selected` only when the row is **already highlighted** — clicking an un-highlighted row first highlights it; selection fires on the second click
 
 ## Dependencies
 
-Managed with **uv**. Key runtime deps: `pagerduty`, `textual>=0.80.0`, `rich`, `pyyaml`, `humanize`. Build backend: `hatchling`.
+Managed with **uv**. Key runtime deps: `pagerduty`, `textual>=8.1.1`, `rich>=14.2.0`, `pyyaml`, `humanize`. Build backend: `hatchling`.

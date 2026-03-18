@@ -12,7 +12,8 @@ from pdh_ng.tui.screens import (
     _fmt_age,
     _urgency_marker,
 )
-from pdh_ng.tui.widgets import DEFAULT_COLUMNS, StatusBar
+from pdh_ng.tui.constants import DEFAULT_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
+from pdh_ng.tui.widgets import StatusBar
 
 
 class TestFmtAge:
@@ -170,21 +171,39 @@ class TestCellValue:
 
 
 class _IncidentsApp(App):
+    CSS = "#title-filter { display: none; }"
+
     def __init__(self, prefs: dict | None = None) -> None:
         super().__init__()
         self.cfg = {"apikey": "x", "uid": "U1", "email": "a@b.com"}
         self._prefs = prefs or {}
         self.visible_columns = DEFAULT_COLUMNS[:]
-        self.refresh_interval = 5
+        self.refresh_time = RefreshTime.S5
         self._prefs_saved: dict | None = None
 
     @property
-    def scope(self) -> str:
-        return self._prefs.get("scope", "mine")
+    def inc_scope(self) -> IncScope:
+        return IncScope(self._prefs.get("inc_scope", IncScope.MINE))
+
+    @inc_scope.setter
+    def inc_scope(self, value: IncScope) -> None:
+        self._prefs["inc_scope"] = int(value)
 
     @property
-    def status_mode(self) -> str:
-        return self._prefs.get("status_mode", "all")
+    def inc_status(self) -> IncStatus:
+        return IncStatus(self._prefs.get("inc_status", IncStatus.ALL))
+
+    @inc_status.setter
+    def inc_status(self, value: IncStatus) -> None:
+        self._prefs["inc_status"] = int(value)
+
+    @property
+    def inc_urgency(self) -> IncUrgency:
+        return IncUrgency(self._prefs.get("inc_urgency", IncUrgency.ALL))
+
+    @inc_urgency.setter
+    def inc_urgency(self, value: IncUrgency) -> None:
+        self._prefs["inc_urgency"] = int(value)
 
     def save_prefs(self) -> None:
         self._prefs_saved = dict(self._prefs)
@@ -205,7 +224,7 @@ class TestIncidentsScreenAutoRefresh:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._refresh_interval = 0
+                screen._refresh_time = RefreshTime.OFF
                 screen._schedule_next_refresh()
                 assert screen._refresh_timer is None
 
@@ -213,7 +232,7 @@ class TestIncidentsScreenAutoRefresh:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._populate_table([], "mine", "")
+                screen._populate_table([], IncScope.MINE, "")
                 assert screen._refresh_timer is not None
 
     async def test_next_refresh_scheduled_after_error(self):
@@ -227,18 +246,18 @@ class TestIncidentsScreenAutoRefresh:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._start_refresh(5)
+                screen._start_refresh(RefreshTime.S5)
                 assert screen._refresh_timer is not None
-                screen._start_refresh(0)
+                screen._start_refresh(RefreshTime.OFF)
                 assert screen._refresh_timer is None
 
     async def test_start_refresh_positive_sets_timer(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._start_refresh(0)
+                screen._start_refresh(RefreshTime.OFF)
                 assert screen._refresh_timer is None
-                screen._start_refresh(3)
+                screen._start_refresh(RefreshTime.S3)
                 assert screen._refresh_timer is not None
 
     async def test_cycling_to_off_stops_timer(self):
@@ -246,7 +265,7 @@ class TestIncidentsScreenAutoRefresh:
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 bar = pilot.app.query_one(StatusBar)
-                while bar._refresh_interval != 0:
+                while bar._refresh_time != RefreshTime.OFF:
                     bar.cycle_refresh()
                 await pilot.pause()
                 assert screen._refresh_timer is None
@@ -256,10 +275,10 @@ class TestIncidentsScreenAutoRefresh:
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 bar = pilot.app.query_one(StatusBar)
-                while bar._refresh_interval != 0:
+                while bar._refresh_time != RefreshTime.OFF:
                     bar.cycle_refresh()
                 await pilot.pause()
-                bar.cycle_refresh()  # off -> 3s
+                bar.cycle_refresh()  # off -> S3
                 await pilot.pause()
                 assert screen._refresh_timer is not None
 
@@ -267,43 +286,46 @@ class TestIncidentsScreenAutoRefresh:
 class TestIncidentsScreenStatePrefs:
     async def test_scope_loaded_from_prefs(self):
         with patch.object(IncidentsScreen, "load_incidents"):
-            async with _IncidentsApp(prefs={"scope": "team"}).run_test() as pilot:
+            async with _IncidentsApp(prefs={"inc_scope": int(IncScope.TEAM)}).run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                assert screen._scope == "team"
+                assert screen._inc_scope == IncScope.TEAM
 
-    async def test_status_mode_loaded_from_prefs(self):
+    async def test_status_loaded_from_prefs(self):
         with patch.object(IncidentsScreen, "load_incidents"):
-            async with _IncidentsApp(prefs={"status_mode": "triggered"}).run_test() as pilot:
+            prefs = {"inc_status": int(IncStatus.TRIGGERED)}
+            async with _IncidentsApp(prefs=prefs).run_test() as pilot:
                 bar = pilot.app.query_one(StatusBar)
-                assert bar._status_mode == "triggered"
+                assert bar._inc_status == IncStatus.TRIGGERED
 
-    async def test_on_unmount_saves_scope(self):
+    async def test_on_unmount_calls_save_prefs(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             app = _IncidentsApp()
             async with app.run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._scope = "all"
                 screen.on_unmount()
-            assert app._prefs.get("scope") == "all"
             assert app._prefs_saved is not None
 
-    async def test_on_unmount_saves_status_mode(self):
+    async def test_filters_changed_persists_scope_status_and_urgency(self):
         with patch.object(IncidentsScreen, "load_incidents"):
-            app = _IncidentsApp()
-            async with app.run_test() as pilot:
+            async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._status_mode = "acknowledged"
-                screen.on_unmount()
-            assert app._prefs.get("status_mode") == "acknowledged"
-            assert app._prefs_saved is not None
+                screen._on_filters_changed(
+                    StatusBar.FiltersChanged(
+                        inc_scope=IncScope.ALL,
+                        inc_status=IncStatus.TRIGGERED,
+                        inc_urgency=IncUrgency.HIGH,
+                    )
+                )
+                assert pilot.app._prefs.get("inc_scope") == int(IncScope.ALL)
+                assert pilot.app._prefs.get("inc_status") == int(IncStatus.TRIGGERED)
+                assert pilot.app._prefs.get("inc_urgency") == int(IncUrgency.HIGH)
 
     async def test_apply_column_selection_uses_scope(self):
-        """Regression: _apply_column_selection must pass _scope, not the removed _mine_only."""
+        """Regression: _apply_column_selection must pass _inc_scope, not the removed _mine_only."""
         with patch.object(IncidentsScreen, "load_incidents"):
-            async with _IncidentsApp(prefs={"scope": "all"}).run_test() as pilot:
+            async with _IncidentsApp(prefs={"inc_scope": int(IncScope.ALL)}).run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incidents_cache = {}
-                # Should not raise AttributeError for _mine_only
                 screen._apply_column_selection(["title", "status"])
                 assert screen._visible_columns == ["title", "status"]
 

@@ -6,73 +6,81 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Label, SelectionList
 from textual.widgets.selection_list import Selection
 
-from ..pd import DEFAULT_URGENCIES, STATUS_ACK, STATUS_TRIGGERED
-
-ALL_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
-DEFAULT_COLUMNS = ["id", "title", "status", "assignee", "service", "age"]
-
-_STATUS_CYCLE = ["all", STATUS_TRIGGERED, STATUS_ACK]
-_STATUS_LABELS = {
-    "all": "2:all statuses",
-    STATUS_TRIGGERED: "2:triggered   ",
-    STATUS_ACK: "2:acknowledged",
-}
-_STATUS_VARIANTS = {"all": "default", STATUS_TRIGGERED: "error", STATUS_ACK: "warning"}
-
-_SCOPE_CYCLE = ["mine", "team", "all"]
-_SCOPE_LABELS = {"mine": "1:mine", "team": "1:team", "all": "1:all "}
-
-_REFRESH_CYCLE = [0, 3, 5, 10]
-_REFRESH_LABELS = {0: "3:↻ off", 3: "3:↻ 3s ", 5: "3:↻ 5s ", 10: "3:↻ 10s"}
+from .constants import (
+    _INC_SCOPE_CYCLE,
+    _INC_SCOPE_LABELS,
+    _INC_STATUS_CYCLE,
+    _INC_STATUS_LABELS,
+    _INC_STATUS_VARIANTS,
+    _INC_URGENCY_CYCLE,
+    _INC_URGENCY_LABELS,
+    _INC_URGENCY_VARIANTS,
+    _REFRESH_TIME_CYCLE,
+    _REFRESH_TIME_LABELS,
+    ALL_COLUMNS,
+    IncScope,
+    IncStatus,
+    IncUrgency,
+    RefreshTime,
+)
 
 
 class StatusBar(Horizontal):
     class FiltersChanged(Message):
         def __init__(
-            self, statuses: list[str], urgencies: list[str], scope: str, status_mode: str
+            self,
+            inc_scope: IncScope,
+            inc_status: IncStatus,
+            inc_urgency: IncUrgency,
         ) -> None:
             super().__init__()
-            self.statuses = statuses
-            self.urgencies = urgencies
-            self.scope = scope
-            self.status_mode = status_mode
+            self.inc_scope = inc_scope
+            self.inc_status = inc_status
+            self.inc_urgency = inc_urgency
 
-    class RefreshIntervalChanged(Message):
-        def __init__(self, interval: int) -> None:
+    class RefreshTimeChanged(Message):
+        def __init__(self, refresh_time: RefreshTime) -> None:
             super().__init__()
-            self.interval = interval
+            self.refresh_time = refresh_time
 
     def __init__(
-        self, scope: str = "mine", refresh_interval: int = 5, status_mode: str = "all", **kwargs
+        self,
+        inc_scope: IncScope = IncScope.MINE,
+        refresh_time: RefreshTime = RefreshTime.S5,
+        inc_status: IncStatus = IncStatus.ALL,
+        inc_urgency: IncUrgency = IncUrgency.ALL,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self._scope: str = scope
-        self._status_mode: str = status_mode
-        self._urgencies: set[str] = set(DEFAULT_URGENCIES)
-        self._refresh_interval: int = refresh_interval
+        self._inc_scope: IncScope = inc_scope
+        self._inc_status: IncStatus = inc_status
+        self._inc_urgency: IncUrgency = inc_urgency
+        self._refresh_time: RefreshTime = refresh_time
         self._count_text: str = ""
 
     def compose(self) -> ComposeResult:
-        yield Button(_SCOPE_LABELS[self._scope], id="scope-btn", compact=True, flat=True)
+        yield Button(_INC_SCOPE_LABELS[self._inc_scope], id="scope-btn", compact=True, flat=True)
         yield Button(
-            _STATUS_LABELS[self._status_mode],
+            _INC_STATUS_LABELS[self._inc_status],
             id="status-btn",
-            variant=_STATUS_VARIANTS[self._status_mode],
+            variant=_INC_STATUS_VARIANTS[self._inc_status],
             compact=True,
             flat=True,
         )
         yield Button(
-            _REFRESH_LABELS[self._refresh_interval],
+            _REFRESH_TIME_LABELS[self._refresh_time],
             id="refresh-btn",
             compact=True,
             flat=True,
         )
+        yield Button(
+            _INC_URGENCY_LABELS[self._inc_urgency],
+            id="urgency-btn",
+            variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
+            compact=True,
+            flat=True,
+        )
         yield Label("", id="count-label")
-
-    def _active_statuses(self) -> list[str]:
-        if self._status_mode == "all":
-            return [STATUS_TRIGGERED, STATUS_ACK]
-        return [self._status_mode]
 
     def set_count(self, count: int, title_filter: str = "", scope: str = "") -> None:
         suffix = f"  filter: {title_filter!r}" if title_filter else ""
@@ -87,29 +95,38 @@ class StatusBar(Horizontal):
         self.query_one("#count-label", Label).update(f"   [bold red]{message}[/bold red]")
 
     def _sync_buttons(self) -> None:
-        self.query_one("#scope-btn", Button).label = _SCOPE_LABELS[self._scope]
+        self.query_one("#scope-btn", Button).label = _INC_SCOPE_LABELS[self._inc_scope]
         btn = self.query_one("#status-btn", Button)
-        btn.label = _STATUS_LABELS[self._status_mode]
-        btn.variant = _STATUS_VARIANTS[self._status_mode]
-        self.query_one("#refresh-btn", Button).label = _REFRESH_LABELS[self._refresh_interval]
+        btn.label = _INC_STATUS_LABELS[self._inc_status]
+        btn.variant = _INC_STATUS_VARIANTS[self._inc_status]
+        self.query_one("#refresh-btn", Button).label = _REFRESH_TIME_LABELS[self._refresh_time]
+        urgency_btn = self.query_one("#urgency-btn", Button)
+        urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
+        urgency_btn.variant = _INC_URGENCY_VARIANTS[self._inc_urgency]
 
     def cycle_scope(self) -> None:
-        idx = _SCOPE_CYCLE.index(self._scope)
-        self._scope = _SCOPE_CYCLE[(idx + 1) % len(_SCOPE_CYCLE)]
+        idx = _INC_SCOPE_CYCLE.index(self._inc_scope)
+        self._inc_scope = _INC_SCOPE_CYCLE[(idx + 1) % len(_INC_SCOPE_CYCLE)]
         self._sync_buttons()
         self._emit()
 
     def cycle_status(self) -> None:
-        idx = _STATUS_CYCLE.index(self._status_mode)
-        self._status_mode = _STATUS_CYCLE[(idx + 1) % len(_STATUS_CYCLE)]
+        idx = _INC_STATUS_CYCLE.index(self._inc_status)
+        self._inc_status = _INC_STATUS_CYCLE[(idx + 1) % len(_INC_STATUS_CYCLE)]
+        self._sync_buttons()
+        self._emit()
+
+    def cycle_urgency(self) -> None:
+        idx = _INC_URGENCY_CYCLE.index(self._inc_urgency)
+        self._inc_urgency = _INC_URGENCY_CYCLE[(idx + 1) % len(_INC_URGENCY_CYCLE)]
         self._sync_buttons()
         self._emit()
 
     def cycle_refresh(self) -> None:
-        idx = _REFRESH_CYCLE.index(self._refresh_interval)
-        self._refresh_interval = _REFRESH_CYCLE[(idx + 1) % len(_REFRESH_CYCLE)]
+        idx = _REFRESH_TIME_CYCLE.index(self._refresh_time)
+        self._refresh_time = _REFRESH_TIME_CYCLE[(idx + 1) % len(_REFRESH_TIME_CYCLE)]
         self._sync_buttons()
-        self.post_message(self.RefreshIntervalChanged(self._refresh_interval))
+        self.post_message(self.RefreshTimeChanged(self._refresh_time))
 
     @on(Button.Pressed, "#scope-btn")
     def _on_scope_btn(self) -> None:
@@ -119,6 +136,10 @@ class StatusBar(Horizontal):
     def _on_status_btn(self) -> None:
         self.cycle_status()
 
+    @on(Button.Pressed, "#urgency-btn")
+    def _on_urgency_btn(self) -> None:
+        self.cycle_urgency()
+
     @on(Button.Pressed, "#refresh-btn")
     def _on_refresh_btn(self) -> None:
         self.cycle_refresh()
@@ -126,10 +147,9 @@ class StatusBar(Horizontal):
     def _emit(self) -> None:
         self.post_message(
             self.FiltersChanged(
-                statuses=self._active_statuses(),
-                urgencies=list(self._urgencies),
-                scope=self._scope,
-                status_mode=self._status_mode,
+                inc_scope=self._inc_scope,
+                inc_status=self._inc_status,
+                inc_urgency=self._inc_urgency,
             )
         )
 

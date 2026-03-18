@@ -14,7 +14,8 @@ def main():
         description="PDH New Generation.",
     )
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         metavar="FILE",
         help="path to config file (default: ~/.config/pdh-ng/config.yaml)",
     )
