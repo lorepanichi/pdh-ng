@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import webbrowser
 from datetime import UTC, datetime
 
 import humanize
@@ -58,18 +59,19 @@ def _apply_title_filter(incs: list[dict], title_filter: str) -> list[dict]:
     return [i for i in incs if title_filter.lower() in i.get("title", "").lower()]
 
 
-def _urgency_marker(inc: dict) -> str:
+def _urgency_marker(inc: dict, auto_acked: bool = False) -> str:
     urgency = inc.get("urgency", "")
+    symbol = "▋" if not auto_acked else "!"
     if urgency == "high":
-        return "[bold red]▋[/bold red]"
+        return f"[bold red]{symbol}[/bold red]"
     if urgency == "low":
-        return "[bold blue]▋[/bold blue]"
-    return " "
+        return f"[bold blue]{symbol}[/bold blue]"
+    return symbol
 
 
-def _row_marker(inc: dict, selected: bool) -> str:
+def _row_marker(inc: dict, selected: bool, auto_acked: bool = False) -> str:
     sel = "[bold green]✓[/bold green]" if selected else " "
-    return _urgency_marker(inc) + sel
+    return _urgency_marker(inc, auto_acked) + sel
 
 
 def _cell_value(inc: dict, col: str) -> str:
@@ -99,8 +101,10 @@ class IncidentsScreen(Screen):
         Binding("1", "cycle_scope", "scope filter", show=False),
         Binding("2", "cycle_status", "status filter", show=False),
         Binding("3", "cycle_urgency", "urgency filter", show=False),
-        Binding("4", "cycle_refresh", "refresh interval", show=False),
+        Binding("4", "cycle_auto_ack", "auto-ack toggle", show=False),
+        Binding("5", "cycle_refresh", "refresh interval", show=False),
         Binding("enter", "view_detail", "Detail", priority=True),
+        Binding("o", "open_url", "↗"),
         Binding("a", "ack_selected", "Ack"),
         Binding("r", "resolve_selected", "Resolve"),
         Binding("s", "snooze_selected", "Snooze ┃"),
@@ -129,6 +133,8 @@ class IncidentsScreen(Screen):
         self._refresh_time: RefreshTime = RefreshTime.S5
         self._refresh_timer: Timer | None = None
         self._suspended: bool = False
+        self._auto_ack: bool = False
+        self._auto_acked_ids: set[str] = set()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -151,6 +157,7 @@ class IncidentsScreen(Screen):
         self._inc_status = self.app.inc_status
         self._inc_urgency = self.app.inc_urgency
         self._refresh_time = self.app.refresh_time
+        self._auto_ack = self.app.auto_ack
         self._current_statuses = _INC_STATUS_API[self._inc_status]
         self._current_urgencies = _INC_URGENCY_API[self._inc_urgency]
         self._visible_columns = self.app.visible_columns
@@ -159,6 +166,7 @@ class IncidentsScreen(Screen):
         bar._inc_status = self._inc_status
         bar._inc_urgency = self._inc_urgency
         bar._refresh_time = self._refresh_time
+        bar._auto_ack = self._auto_ack
         bar._sync_buttons()
         self._rebuild_columns()
         self.load_incidents()
@@ -245,20 +253,19 @@ class IncidentsScreen(Screen):
         self._incident_ids = []
         self._incidents_cache = {}
 
-        for inc in incs:
+        for inc in sorted(incs, key=lambda i: i.get("created_at", "")):
             inc_id = inc["id"]
             self._incident_ids.append(inc_id)
             self._incidents_cache[inc_id] = inc
             cells = [_cell_value(inc, col) for col in self._visible_columns]
-            table.add_row(_row_marker(inc, False), *cells, key=inc_id)
+            selected = inc_id in self._selected_ids
+            auto_acked = inc_id in self._auto_acked_ids
+            table.add_row(_row_marker(inc, selected, auto_acked), *cells, key=inc_id)
 
+        # remove stale incident IDs from the selected ones
         self._selected_ids &= set(self._incident_ids)
-        for i, inc_id in enumerate(self._incident_ids):
-            if inc_id in self._selected_ids:
-                inc = self._incidents_cache[inc_id]
-                table.update_cell_at(Coordinate(i, 0), _row_marker(inc, True))
 
-        if cursor_id in self._incidents_cache:
+        if cursor_id in self._incident_ids:
             try:
                 table.move_cursor(row=table.get_row_index(cursor_id), scroll=True)
             except Exception:
@@ -268,6 +275,8 @@ class IncidentsScreen(Screen):
             len(incs), title_filter, inc_scope.name.lower()
         )
         self._schedule_next_refresh()
+        if self._auto_ack:
+            self._do_auto_ack(incs)
 
     # -- event handlers --
 
@@ -275,27 +284,29 @@ class IncidentsScreen(Screen):
     def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
         self._inc_scope = event.inc_scope
         self.app.inc_scope = event.inc_scope
-        self._schedule_next_refresh()
 
     @on(StatusBar.StatusChanged)
     def _on_status_changed(self, event: StatusBar.StatusChanged) -> None:
         self._inc_status = event.inc_status
         self._current_statuses = _INC_STATUS_API[event.inc_status]
         self.app.inc_status = event.inc_status
-        self._schedule_next_refresh()
 
     @on(StatusBar.UrgencyChanged)
     def _on_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
         self._inc_urgency = event.inc_urgency
         self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
         self.app.inc_urgency = event.inc_urgency
-        self._schedule_next_refresh()
 
     @on(StatusBar.RefreshTimeChanged)
     def _on_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
         self._refresh_time = event.refresh_time
         self.app.refresh_time = event.refresh_time
         self._schedule_next_refresh()
+
+    @on(StatusBar.AutoAckChanged)
+    def _on_auto_ack_changed(self, event: StatusBar.AutoAckChanged) -> None:
+        self._auto_ack = event.auto_ack
+        self.app.auto_ack = event.auto_ack
 
     @on(Input.Submitted, "#title-filter")
     def _on_title_filter_submitted(self, event: Input.Submitted) -> None:
@@ -314,6 +325,9 @@ class IncidentsScreen(Screen):
 
     def action_cycle_urgency(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_urgency()
+
+    def action_cycle_auto_ack(self) -> None:
+        self.query_one("#status-bar", StatusBar).toggle_auto_ack()
 
     def action_cycle_refresh(self) -> None:
         self.query_one("#status-bar", StatusBar).cycle_refresh()
@@ -380,6 +394,16 @@ class IncidentsScreen(Screen):
             if inc is not None:
                 self.app.push_screen(IncidentDetailScreen(inc))
 
+    def action_open_url(self) -> None:
+        table = self.query_one("#incidents-table", DataTable)
+        row_idx = table.cursor_row
+        if 0 <= row_idx < len(self._incident_ids):
+            inc = self._incidents_cache.get(self._incident_ids[row_idx])
+            if inc:
+                url = inc.get("html_url", "")
+                if url:
+                    webbrowser.open(url)
+
     # -- actions: incident mutations --
 
     def _get_target_incs(self) -> list[dict]:
@@ -413,6 +437,31 @@ class IncidentsScreen(Screen):
             logger.exception("Error acking incidents")
             app.call_from_thread(self._set_error, str(e))
             return
+        app.call_from_thread(self.load_incidents)
+
+    @work(thread=True)
+    def _do_auto_ack(self, incs: list[dict]) -> None:
+        app = self.app
+        uid = app.cfg["uid"]
+        to_ack = [
+            inc
+            for inc in incs
+            if inc.get("status") == STATUS_TRIGGERED
+            and any(a["assignee"]["id"] == uid for a in inc.get("assignments", []))
+        ]
+        if not to_ack:
+            return
+        self._auto_acked_ids = {inc["id"] for inc in to_ack}
+        try:
+            app.pd.incidents.ack(to_ack)
+            logger.debug("Auto-acked %d incidents", len(to_ack))
+        except Exception as e:
+            logger.exception("Error auto-acking incidents")
+            app.call_from_thread(self._set_error, str(e))
+            return
+        app.call_from_thread(
+            app.notify, f"⚡ Auto-acked {len(to_ack)} incident(s)", severity="warning"
+        )
         app.call_from_thread(self.load_incidents)
 
     def action_resolve_selected(self) -> None:

@@ -19,6 +19,12 @@ def main():
         metavar="FILE",
         help="path to config file (default: ~/.config/pdh-ng/config.yaml)",
     )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="enable debug logging",
+    )
     args = parser.parse_args()
 
     config_path = args.config or os.environ.get("PDH_NG_CONFIG", "~/.config/pdh-ng/config.yaml")
@@ -28,4 +34,6 @@ def main():
         sys.exit(1)
 
     cfg = load_and_validate(config_path)
+    if args.debug:
+        cfg["log_level"] = "DEBUG"
     TuiApp(cfg=cfg).run()

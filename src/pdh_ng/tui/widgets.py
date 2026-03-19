@@ -8,6 +8,8 @@ from textual.widgets import Button, Label, SelectionList
 from textual.widgets.selection_list import Selection
 
 from .constants import (
+    _AUTO_ACK_LABELS,
+    _AUTO_ACK_VARIANTS,
     _INC_SCOPE_CYCLE,
     _INC_SCOPE_LABELS,
     _INC_STATUS_CYCLE,
@@ -47,12 +49,18 @@ class StatusBar(Horizontal):
             super().__init__()
             self.refresh_time = refresh_time
 
+    class AutoAckChanged(Message):
+        def __init__(self, auto_ack: bool) -> None:
+            super().__init__()
+            self.auto_ack = auto_ack
+
     def __init__(
         self,
         inc_scope: IncScope = IncScope.MINE,
         refresh_time: RefreshTime = RefreshTime.S5,
         inc_status: IncStatus = IncStatus.ALL,
         inc_urgency: IncUrgency = IncUrgency.ALL,
+        auto_ack: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -60,6 +68,7 @@ class StatusBar(Horizontal):
         self._inc_status: IncStatus = inc_status
         self._inc_urgency: IncUrgency = inc_urgency
         self._refresh_time: RefreshTime = refresh_time
+        self._auto_ack: bool = auto_ack
         self._count_text: str = ""
 
     def compose(self) -> ComposeResult:
@@ -75,6 +84,13 @@ class StatusBar(Horizontal):
             _INC_URGENCY_LABELS[self._inc_urgency],
             id="urgency-btn",
             variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
+            compact=True,
+            flat=True,
+        )
+        yield Button(
+            _AUTO_ACK_LABELS[self._auto_ack],
+            id="auto-ack-btn",
+            variant=_AUTO_ACK_VARIANTS[self._auto_ack],
             compact=True,
             flat=True,
         )
@@ -107,6 +123,9 @@ class StatusBar(Horizontal):
         urgency_btn = self.query_one("#urgency-btn", Button)
         urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
         urgency_btn.variant = _INC_URGENCY_VARIANTS[self._inc_urgency]
+        auto_ack_btn = self.query_one("#auto-ack-btn", Button)
+        auto_ack_btn.label = _AUTO_ACK_LABELS[self._auto_ack]
+        auto_ack_btn.variant = _AUTO_ACK_VARIANTS[self._auto_ack]
 
     def cycle_scope(self) -> None:
         idx = _INC_SCOPE_CYCLE.index(self._inc_scope)
@@ -132,6 +151,11 @@ class StatusBar(Horizontal):
         self._sync_buttons()
         self.post_message(self.RefreshTimeChanged(self._refresh_time))
 
+    def toggle_auto_ack(self) -> None:
+        self._auto_ack = not self._auto_ack
+        self._sync_buttons()
+        self.post_message(self.AutoAckChanged(self._auto_ack))
+
     @on(Button.Pressed, "#scope-btn")
     def _on_scope_btn(self) -> None:
         self.cycle_scope()
@@ -147,6 +171,10 @@ class StatusBar(Horizontal):
     @on(Button.Pressed, "#refresh-btn")
     def _on_refresh_btn(self) -> None:
         self.cycle_refresh()
+
+    @on(Button.Pressed, "#auto-ack-btn")
+    def _on_auto_ack_btn(self) -> None:
+        self.toggle_auto_ack()
 
 
 class ColumnSelectorScreen(ModalScreen):

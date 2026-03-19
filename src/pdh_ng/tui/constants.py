@@ -67,10 +67,19 @@ _INC_URGENCY_API = {
     IncUrgency.LOW: [URGENCY_LOW],
 }
 
+_AUTO_ACK_LABELS = {
+    False: "4:auto-ack OFF",
+    True: "4:auto-ack ON ",
+}
+_AUTO_ACK_VARIANTS = {
+    False: "default",
+    True: "warning",
+}
+
 _REFRESH_TIME_CYCLE = list(RefreshTime)
 _REFRESH_TIME_LABELS = {
-    RefreshTime.OFF: "4:↻ off",
-    RefreshTime.S3: "4:↻ 3s ",
-    RefreshTime.S5: "4:↻ 5s ",
-    RefreshTime.S10: "4:↻ 10s",
+    RefreshTime.OFF: "5:↻ off",
+    RefreshTime.S3: "5:↻ 3s ",
+    RefreshTime.S5: "5:↻ 5s ",
+    RefreshTime.S10: "5:↻ 10s",
 }

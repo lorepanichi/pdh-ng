@@ -44,6 +44,7 @@ uv run pytest tests/ -q
 
 - `-c FILE` / `--config FILE` — use an alternative config file (overrides `PDH_NG_CONFIG` env var)
 - If `-c FILE` is given and the file does not exist, print error and exit (default path missing is silently ignored)
+- `-d` / `--debug` — force `cfg["log_level"] = "DEBUG"` after config is loaded, overriding the file/env value
 
 ## Config loading (`config.py`)
 
@@ -74,25 +75,26 @@ All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from wor
 ### Cell markup
 `DataTable.add_row()` renders Rich markup automatically. `DataTable.update_cell_at()` does NOT — wrap values with `Text.from_markup()` from `rich.text`.
 
-### Urgency indicator
-The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, selected)`:
-- Always shows urgency `▋` (red = high, blue = low, space = none) plus selection `✓` (green) or space side by side — e.g. `▋✓` or `▋ `.
-- `_urgency_marker` returns `" "` (space) for unknown/missing urgency so the cell never collapses.
+### Symbols indicator
+The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, selected, auto_acked=False)`:
+- Normal: urgency `▋` (red = high, blue = low, unstyled = none) plus selection `✓` (green) or space — e.g. `▋✓` or `▋ `.
+- Auto-acked: `!` replaces `▋`, keeping urgency color when set (red = high, blue = low), unstyled `!` when urgency is unknown/missing.
 - "urgency" is excluded from `ALL_COLUMNS`.
 
 ### Cursor and selection persistence
 `_populate_table` snapshots `cursor_id` (the incident ID at the current cursor row) before clearing the table, then restores via `table.get_row_index(cursor_id)` + `table.move_cursor()` after repopulating. `_selected_ids` is reconciled with the new dataset (`&=` set intersection) rather than cleared, and surviving selections have their marker cells repainted.
 
 ### Status bar
-`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains four cycling buttons:
+`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains five buttons:
 - `1` / click: cycles scope `mine → team → all`
 - `2` / click: cycles status filter `all statuses → triggered → ack'd`
 - `3` / click: cycles urgency filter `all urgencies → high → low`
-- `4` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
+- `4` / click: toggles auto-ack `autoack: off ↔ autoack: ON` (warning variant when on)
+- `5` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
 
 The count label shows `N incident(s)` and appends `↻` while a refresh is in progress (preserving the last count).
 
-Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc_status)`, `UrgencyChanged(inc_urgency)`, `RefreshTimeChanged(refresh_time)`. Receivers for filter messages derive API strings via `_INC_STATUS_API[inc_status]` and `_INC_URGENCY_API[inc_urgency]`.
+Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc_status)`, `UrgencyChanged(inc_urgency)`, `AutoAckChanged(auto_ack: bool)`, `RefreshTimeChanged(refresh_time)`. Receivers for filter messages derive API strings via `_INC_STATUS_API[inc_status]` and `_INC_URGENCY_API[inc_urgency]`.
 
 ### Scope modes
 - `IncScope.MINE`: `pd.incidents.mine()`
@@ -104,6 +106,9 @@ Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc
 
 `on_screen_suspend` sets `_suspended = True` and cancels any live timer. `on_screen_resume` clears `_suspended` and calls `_schedule_next_refresh()`. This stops all API calls while `IncidentDetailScreen` is open.
 
+### Auto-ack
+When `_auto_ack` is `True`, `_populate_table` calls `_do_auto_ack(incs)` at the end of every table load. The worker filters the fetched list to incidents where `status == "triggered"` AND the user's `uid` appears in `assignments[*].assignee.id` — regardless of the active scope (mine/team/all). Matching incidents are acked silently (no confirmation dialog), `_auto_acked_ids` is set to their IDs, a toast is posted via `app.notify()`, and `load_incidents()` is called to reload. On the reload triggered by the ack, `_populate_table` renders those rows with a `[bold yellow]![/bold yellow]` marker for one cycle. `_auto_acked_ids` is reset at the start of each `_do_auto_ack` call so stale markers don't persist beyond one ack batch.
+
 ### Persistent UI prefs
 `TuiApp` reads/writes `~/.local/state/pdh-ng/ui.yaml` (path constant: `_PREFS_PATH`). Stored keys:
 - `visible_columns` — visible column list (filtered against `ALL_COLUMNS` on load)
@@ -111,8 +116,9 @@ Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc
 - `inc_status` — stored as int (`IncStatus` value)
 - `inc_urgency` — stored as int (`IncUrgency` value)
 - `refresh_time` — stored as int (`RefreshTime` value, i.e. seconds)
+- `auto_ack` — stored as bool (default `False`)
 
-All five are r/w properties on `TuiApp`. Setters write to `_prefs` in memory only; `save_prefs()` is called once in `IncidentsScreen.on_unmount`. `inc_scope`, `inc_status`, and `inc_urgency` are updated immediately in `_on_filters_changed`; `refresh_time` in `_on_refresh_time_changed`.
+All six are r/w properties on `TuiApp`. Setters write to `_prefs` in memory only; `save_prefs()` is called once in `IncidentsScreen.on_unmount`. `inc_scope`, `inc_status`, `inc_urgency`, and `auto_ack` are updated immediately in their respective `_on_*_changed` handlers; `refresh_time` in `_on_refresh_time_changed`.
 
 ### Logging
 Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config keys `log_enabled`, `log_file`, `log_level`. If disabled, adds `NullHandler` to suppress output.

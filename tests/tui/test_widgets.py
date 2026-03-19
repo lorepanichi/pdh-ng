@@ -255,6 +255,79 @@ class TestStatusBar:
                 assert label == _INC_URGENCY_LABELS[expected]
 
 
+class TestStatusBarAutoAck:
+    async def test_default_auto_ack_is_off(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._auto_ack is False
+
+    async def test_initial_auto_ack_from_param(self):
+        class _App(App):
+            def compose(self) -> ComposeResult:
+                yield StatusBar(auto_ack=True, id="status-bar")
+
+        async with _App().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._auto_ack is True
+
+    async def test_toggle_auto_ack_turns_on(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.toggle_auto_ack()
+            assert bar._auto_ack is True
+
+    async def test_toggle_auto_ack_turns_off(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.toggle_auto_ack()
+            bar.toggle_auto_ack()
+            assert bar._auto_ack is False
+
+    async def test_auto_ack_button_click_toggles(self):
+        async with StatusBarApp().run_test() as pilot:
+            await pilot.click("#auto-ack-btn")
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            assert bar._auto_ack is True
+
+    async def test_auto_ack_changed_message(self):
+        class _App(App):
+            CSS = ""
+
+            def __init__(self):
+                super().__init__()
+                self.received: list[bool] = []
+
+            def compose(self) -> ComposeResult:
+                yield StatusBar(id="status-bar")
+
+            def on_status_bar_auto_ack_changed(self, event: StatusBar.AutoAckChanged) -> None:
+                self.received.append(event.auto_ack)
+
+        async with _App().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.toggle_auto_ack()
+            await pilot.pause()
+            assert pilot.app.received == [True]
+            bar.toggle_auto_ack()
+            await pilot.pause()
+            assert pilot.app.received == [True, False]
+
+    async def test_auto_ack_button_label_on(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            bar.toggle_auto_ack()
+            await pilot.pause()
+            label = str(pilot.app.query_one("#auto-ack-btn").label)
+            assert "ON" in label
+
+    async def test_auto_ack_button_label_off(self):
+        async with StatusBarApp().run_test() as pilot:
+            bar = pilot.app.query_one("#status-bar", StatusBar)
+            await pilot.pause()
+            label = str(pilot.app.query_one("#auto-ack-btn").label)
+            assert "off" in label
+
+
 class TestSnoozeDialog:
     async def test_1h_dismisses_3600(self):
         async with ModalApp(SnoozeDialog()).run_test() as pilot:

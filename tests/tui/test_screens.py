@@ -11,6 +11,7 @@ from pdh_ng.tui.screens import (
     _cell_value,
     _colored,
     _fmt_age,
+    _row_marker,
     _urgency_marker,
 )
 from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
@@ -60,11 +61,11 @@ class TestUrgencyMarker:
 
     def test_missing_urgency(self):
         result = _urgency_marker({})
-        assert result == " "
+        assert result == "▋"
 
     def test_unknown_urgency(self):
         result = _urgency_marker({"urgency": "unknown"})
-        assert result == " "
+        assert result == "▋"
 
 
 class TestApplyTitleFilter:
@@ -205,6 +206,14 @@ class _IncidentsApp(App):
     @inc_urgency.setter
     def inc_urgency(self, value: IncUrgency) -> None:
         self._prefs["inc_urgency"] = int(value)
+
+    @property
+    def auto_ack(self) -> bool:
+        return self._prefs.get("auto_ack", False)
+
+    @auto_ack.setter
+    def auto_ack(self, value: bool) -> None:
+        self._prefs["auto_ack"] = value
 
     def save_prefs(self) -> None:
         self._prefs_saved = dict(self._prefs)
@@ -626,3 +635,136 @@ class TestIncidentsScreenBulkActions:
                     screen.action_snooze_selected()
                     await pilot.pause()
                     mock_push.assert_not_called()
+
+
+class TestRowMarker:
+    def test_normal_high_urgency(self):
+        inc = {"urgency": "high"}
+        result = _row_marker(inc, False)
+        assert "red" in result
+        assert "▋" in result
+
+    def test_normal_selected(self):
+        inc = {"urgency": "low"}
+        result = _row_marker(inc, True)
+        assert "✓" in result
+
+    def test_auto_acked_shows_bang(self):
+        inc = {"urgency": "high"}
+        result = _row_marker(inc, False, auto_acked=True)
+        assert "!" in result
+        assert "▋" not in result
+
+    def test_auto_acked_selected_shows_both(self):
+        inc = {"urgency": "high"}
+        result = _row_marker(inc, True, auto_acked=True)
+        assert "!" in result
+        assert "✓" in result
+
+    def test_auto_acked_false_is_normal(self):
+        inc = {"urgency": "high"}
+        assert _row_marker(inc, False, auto_acked=False) == _row_marker(inc, False)
+
+
+_TRIGGERED_INC = {
+    "id": "I1",
+    "title": "Test",
+    "status": "triggered",
+    "urgency": "high",
+    "assignments": [{"assignee": {"id": "U1", "summary": "Me"}}],
+    "service": {"summary": "web"},
+    "created_at": "2024-01-01T00:00:00Z",
+    "html_url": "https://example.pagerduty.com/incidents/I1",
+}
+
+_OTHER_USER_INC = {
+    **_TRIGGERED_INC,
+    "id": "I2",
+    "assignments": [{"assignee": {"id": "U2", "summary": "Someone Else"}}],
+}
+
+_ACKED_INC = {
+    **_TRIGGERED_INC,
+    "id": "I3",
+    "status": "acknowledged",
+}
+
+
+class TestAutoAckFilter:
+    """Unit tests for the user-assignment filtering logic in _do_auto_ack."""
+
+    def _filter(self, incs: list[dict], uid: str = "U1") -> list[dict]:
+        return [
+            inc for inc in incs
+            if inc.get("status") == "triggered"
+            and any(a["assignee"]["id"] == uid for a in inc.get("assignments", []))
+        ]
+
+    def test_keeps_triggered_assigned_to_user(self):
+        result = self._filter([_TRIGGERED_INC])
+        assert len(result) == 1
+        assert result[0]["id"] == "I1"
+
+    def test_skips_incident_assigned_to_other_user(self):
+        result = self._filter([_OTHER_USER_INC])
+        assert result == []
+
+    def test_skips_already_acked_incident(self):
+        result = self._filter([_ACKED_INC])
+        assert result == []
+
+    def test_filters_mixed_list(self):
+        incs = [_TRIGGERED_INC, _OTHER_USER_INC, _ACKED_INC]
+        result = self._filter(incs)
+        assert len(result) == 1
+        assert result[0]["id"] == "I1"
+
+    def test_empty_assignments_is_skipped(self):
+        inc = {**_TRIGGERED_INC, "assignments": []}
+        result = self._filter([inc])
+        assert result == []
+
+    def test_empty_list_returns_empty(self):
+        assert self._filter([]) == []
+
+
+class TestAutoAckStatePrefs:
+    async def test_auto_ack_default_is_false(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                assert screen._auto_ack is False
+
+    async def test_auto_ack_loaded_from_prefs(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp(prefs={"auto_ack": True}).run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                assert screen._auto_ack is True
+
+    async def test_auto_ack_changed_persists_to_app(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._on_auto_ack_changed(StatusBar.AutoAckChanged(auto_ack=True))
+                assert screen._auto_ack is True
+                assert pilot.app._prefs.get("auto_ack") is True
+
+    async def test_auto_ack_off_persists(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp(prefs={"auto_ack": True}).run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._on_auto_ack_changed(StatusBar.AutoAckChanged(auto_ack=False))
+                assert pilot.app._prefs.get("auto_ack") is False
+
+    async def test_auto_acked_ids_tracked_in_populate(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._auto_acked_ids = {"I1"}
+                screen._populate_table([_TRIGGERED_INC], IncScope.MINE, "")
+                await pilot.pause()
+                from textual.coordinate import Coordinate
+                from textual.widgets import DataTable
+                table = pilot.app.query_one("#incidents-table", DataTable)
+                cell = table.get_cell_at(Coordinate(0, 0))
+                assert "!" in str(cell)

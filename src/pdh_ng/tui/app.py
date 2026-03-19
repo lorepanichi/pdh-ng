@@ -103,5 +103,13 @@ class TuiApp(App):
     def inc_urgency(self, value: IncUrgency) -> None:
         self._prefs["inc_urgency"] = int(value)
 
+    @property
+    def auto_ack(self) -> bool:
+        return self._prefs.get("auto_ack", False)
+
+    @auto_ack.setter
+    def auto_ack(self, value: bool) -> None:
+        self._prefs["auto_ack"] = value
+
     def on_mount(self) -> None:
         self.push_screen(IncidentsScreen())

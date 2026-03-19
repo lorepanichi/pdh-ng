@@ -1,6 +1,6 @@
 [project]
 name = "pdh-ng"
-version = "0.1.0"
+version = "0.2.0"
 description = "PDH New Generation"
 authors = [
     {name = "Lorenzo Panichi", email = "lorenzo@panichi.org"}

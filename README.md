@@ -57,30 +57,61 @@ uid: UXXXXXXX
 
 ## Usage
 
-```sh
-pdh-ng
+```
+pdh-ng [-c FILE] [-d]
 ```
 
+**Options**
+
+| Flag | Description |
+|------|-------------|
+| `-c FILE`, `--config FILE` | Use FILE as config. Exits with error if FILE does not exist. Overrides `PDH_NG_CONFIG`. |
+| `-d`, `--debug` | Force log level to DEBUG, overriding the config value. |
+
 ### Keybindings
+
+**Status bar (filters & controls)**
 
 | Key | Action |
 |-----|--------|
 | `1` | Cycle scope: mine → team → all |
 | `2` | Cycle status filter: all → triggered → acknowledged |
-| `3` | Cycle refresh time: 5s → 10s → off → 3s |
+| `3` | Cycle urgency filter: all → high → low |
+| `4` | Toggle auto-ack on/off |
+| `5` | Cycle auto-refresh interval: off → 3s → 5s → 10s |
+
+**Incident actions**
+
+| Key | Action |
+|-----|--------|
+| `enter` | Open incident detail |
+| `o` | Open incident URL in browser |
 | `a` | Acknowledge selected incident(s) |
 | `r` | Resolve selected incident(s) |
 | `s` | Snooze selected incident(s) |
-| `space` | Select/deselect incident |
-| `escape` | Clear incidents selection |
-| `f` | Toggle title filter (prefix with `!` to exclude) |
+| `space` | Select / deselect incident |
+| `escape` | Clear selection, or hide title filter |
+
+**View**
+
+| Key | Action |
+|-----|--------|
+| `f` | Toggle title filter input (prefix term with `!` to exclude) |
 | `c` | Select visible columns |
+
+**Misc**
+| Key | Action |
+|-----|--------|
 | `q` | Quit |
+
+### Auto-ack
+
+When auto-ack is on (`4`), every table load silently acknowledges all **triggered** incidents assigned to you - regardless of the active scope. Other users' incidents are never touched. Auto-acked rows show a `!` marker for one refresh cycle; a toast notification reports how many were acked.
 
 ## UI preferences
 
-Column visibility, incidents scope, status, urgency and refresh time are all persisted to `~/.local/state/pdh-ng/ui.yaml`.
+Scope, status filter, urgency filter, auto-ack, refresh interval, and column visibility are all persisted to `~/.local/state/pdh-ng/ui.yaml` and restored on next launch.
 
-Changing incident scope, status, urgency - or refresh interval - resets the auto-refresh timer (next fetch starts a full interval from that moment).
+Changing the refresh interval resets the auto-refresh timer — the next fetch starts a full interval from that moment.
 
-Changing visible columns only re-renders already-fetched data from memory — no API call, no timer reset.
+Changing visible columns re-renders already-fetched data from memory — no API call, no timer reset.
