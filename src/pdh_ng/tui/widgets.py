@@ -9,15 +9,12 @@ from textual.widgets.selection_list import Selection
 
 from .constants import (
     _AUTO_ACK_LABELS,
-    _AUTO_ACK_VARIANTS,
     _INC_SCOPE_CYCLE,
     _INC_SCOPE_LABELS,
     _INC_STATUS_CYCLE,
     _INC_STATUS_LABELS,
-    _INC_STATUS_VARIANTS,
     _INC_URGENCY_CYCLE,
     _INC_URGENCY_LABELS,
-    _INC_URGENCY_VARIANTS,
     _REFRESH_TIME_CYCLE,
     _REFRESH_TIME_LABELS,
     ALL_COLUMNS,
@@ -57,10 +54,10 @@ class StatusBar(Horizontal):
     def __init__(
         self,
         inc_scope: IncScope = IncScope.MINE,
-        refresh_time: RefreshTime = RefreshTime.S5,
         inc_status: IncStatus = IncStatus.ALL,
         inc_urgency: IncUrgency = IncUrgency.ALL,
         auto_ack: bool = False,
+        refresh_time: RefreshTime = RefreshTime.S5,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -72,36 +69,12 @@ class StatusBar(Horizontal):
         self._status_text: str = ""
 
     def compose(self) -> ComposeResult:
-        yield Button(
-            _INC_SCOPE_LABELS[self._inc_scope], id="inc-scope-btn", compact=True, flat=True
-        )
-        yield Button(
-            _INC_STATUS_LABELS[self._inc_status],
-            id="inc-status-btn",
-            variant=_INC_STATUS_VARIANTS[self._inc_status],
-            compact=True,
-            flat=True,
-        )
-        yield Button(
-            _INC_URGENCY_LABELS[self._inc_urgency],
-            id="inc-urgency-btn",
-            variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
-            compact=True,
-            flat=True,
-        )
-        yield Button(
-            _AUTO_ACK_LABELS[self._auto_ack],
-            id="auto-ack-btn",
-            variant=_AUTO_ACK_VARIANTS[self._auto_ack],
-            compact=True,
-            flat=True,
-        )
-        yield Button(
-            _REFRESH_TIME_LABELS[self._refresh_time],
-            id="refresh-time-btn",
-            compact=True,
-            flat=True,
-        )
+        # Button style is set by css
+        yield Button(_INC_SCOPE_LABELS[self._inc_scope], id="inc-scope-btn")
+        yield Button(_INC_STATUS_LABELS[self._inc_status], id="inc-status-btn")
+        yield Button(_INC_URGENCY_LABELS[self._inc_urgency], id="inc-urgency-btn")
+        yield Button(_AUTO_ACK_LABELS[self._auto_ack], id="auto-ack-btn")
+        yield Button(_REFRESH_TIME_LABELS[self._refresh_time], id="refresh-time-btn")
         yield Label("", id="status-label")
 
     def set_status(self, inc_count: int, title_filter: str = "") -> None:
@@ -116,52 +89,38 @@ class StatusBar(Horizontal):
     def set_error(self, message: str) -> None:
         self.query_one("#status-label", Label).update(f"   [bold red]{message}[/bold red]")
 
-    def _sync_buttons(self) -> None:
-        inc_scope_btn = self.query_one("#inc-scope-btn", Button)
-        inc_scope_btn.label = _INC_SCOPE_LABELS[self._inc_scope]
-
-        inc_status_btn = self.query_one("#inc-status-btn", Button)
-        inc_status_btn.label = _INC_STATUS_LABELS[self._inc_status]
-        inc_status_btn.variant = _INC_STATUS_VARIANTS[self._inc_status]
-
-        inc_urgency_btn = self.query_one("#inc-urgency-btn", Button)
-        inc_urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
-        inc_urgency_btn.variant = _INC_URGENCY_VARIANTS[self._inc_urgency]
-
-        refresh_time_btn = self.query_one("#refresh-time-btn", Button)
-        refresh_time_btn.label = _REFRESH_TIME_LABELS[self._refresh_time]
-
-        auto_ack_btn = self.query_one("#auto-ack-btn", Button)
-        auto_ack_btn.label = _AUTO_ACK_LABELS[self._auto_ack]
-        auto_ack_btn.variant = _AUTO_ACK_VARIANTS[self._auto_ack]
-
     def cycle_scope(self) -> None:
         idx = _INC_SCOPE_CYCLE.index(self._inc_scope)
         self._inc_scope = _INC_SCOPE_CYCLE[(idx + 1) % len(_INC_SCOPE_CYCLE)]
-        self._sync_buttons()
+        inc_scope_btn = self.query_one("#inc-scope-btn", Button)
+        inc_scope_btn.label = _INC_SCOPE_LABELS[self._inc_scope]
         self.post_message(self.ScopeChanged(self._inc_scope))
 
     def cycle_status(self) -> None:
         idx = _INC_STATUS_CYCLE.index(self._inc_status)
         self._inc_status = _INC_STATUS_CYCLE[(idx + 1) % len(_INC_STATUS_CYCLE)]
-        self._sync_buttons()
+        inc_status_btn = self.query_one("#inc-status-btn", Button)
+        inc_status_btn.label = _INC_STATUS_LABELS[self._inc_status]
         self.post_message(self.StatusChanged(self._inc_status))
 
     def cycle_urgency(self) -> None:
         idx = _INC_URGENCY_CYCLE.index(self._inc_urgency)
         self._inc_urgency = _INC_URGENCY_CYCLE[(idx + 1) % len(_INC_URGENCY_CYCLE)]
-        self._sync_buttons()
+        inc_urgency_btn = self.query_one("#inc-urgency-btn", Button)
+        inc_urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
         self.post_message(self.UrgencyChanged(self._inc_urgency))
 
     def cycle_refresh(self) -> None:
         idx = _REFRESH_TIME_CYCLE.index(self._refresh_time)
         self._refresh_time = _REFRESH_TIME_CYCLE[(idx + 1) % len(_REFRESH_TIME_CYCLE)]
-        self._sync_buttons()
+        refresh_time_btn = self.query_one("#refresh-time-btn", Button)
+        refresh_time_btn.label = _REFRESH_TIME_LABELS[self._refresh_time]
         self.post_message(self.RefreshTimeChanged(self._refresh_time))
 
     def toggle_auto_ack(self) -> None:
         self._auto_ack = not self._auto_ack
-        self._sync_buttons()
+        auto_ack_btn = self.query_one("#auto-ack-btn", Button)
+        auto_ack_btn.label = _AUTO_ACK_LABELS[self._auto_ack]
         self.post_message(self.AutoAckChanged(self._auto_ack))
 
     @on(Button.Pressed, "#inc-scope-btn")

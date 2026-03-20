@@ -217,7 +217,14 @@ class _IncidentsApp(App):
         self._prefs_saved = dict(self._prefs)
 
     def compose(self) -> ComposeResult:
-        yield IncidentsScreen()
+        yield IncidentsScreen(
+            inc_scope=self.inc_scope,
+            inc_status=self.inc_status,
+            inc_urgency=self.inc_urgency,
+            refresh_time=self.refresh_time,
+            auto_ack=self.auto_ack,
+            visible_columns=self.visible_columns,
+        )
 
 
 class TestIncidentsScreenAutoRefresh:

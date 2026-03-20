@@ -112,4 +112,11 @@ class TuiApp(App):
         self._prefs["auto_ack"] = value
 
     def on_mount(self) -> None:
-        self.push_screen(IncidentsScreen())
+        self.push_screen(IncidentsScreen(
+            inc_scope=self.inc_scope,
+            inc_status=self.inc_status,
+            inc_urgency=self.inc_urgency,
+            refresh_time=self.refresh_time,
+            auto_ack=self.auto_ack,
+            visible_columns=self.visible_columns,
+        ))

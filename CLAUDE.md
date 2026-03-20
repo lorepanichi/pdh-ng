@@ -76,20 +76,22 @@ All PagerDuty API calls run in `@work(thread=True)` workers. UI updates from wor
 `DataTable.add_row()` renders Rich markup automatically. `DataTable.update_cell_at()` does NOT — wrap values with `Text.from_markup()` from `rich.text`.
 
 ### Symbols indicator
-The first column (`width=2`) is a combined marker rendered by `_row_marker(inc, selected, auto_acked=False)`:
-- Normal: urgency `▋` (red = high, blue = low, unstyled = none) plus selection `✓` (green) or space — e.g. `▋✓` or `▋ `.
-- Auto-acked: `!` replaces `▋`, keeping urgency color when set (red = high, blue = low), unstyled `!` when urgency is unknown/missing.
-- "urgency" is excluded from `ALL_COLUMNS`.
+The first column (`width=3`) is a combined marker rendered by `_row_marker(inc)`, which concatenates three characters:
+- Urgency: `▋` (red = high, blue = low) or space — from `_urgency_marker(inc)` (static method)
+- Auto-ack: `!` (bold yellow) if the incident is in `_auto_acked_ids`, else space
+- Selection: `✓` (bold green) if the incident is in `_selected_ids`, else space
+
+"urgency" is excluded from `ALL_COLUMNS`.
 
 ### Cursor and selection persistence
-`_populate_table` snapshots `cursor_id` (the incident ID at the current cursor row) before clearing the table, then restores via `table.get_row_index(cursor_id)` + `table.move_cursor()` after repopulating. `_selected_ids` is reconciled with the new dataset (`&=` set intersection) rather than cleared, and surviving selections have their marker cells repainted.
+`_populate_table` snapshots `cursor_id` (the incident ID at the current cursor row) before clearing the table, then restores via `table.get_row_index(cursor_id)` + `table.move_cursor()` after repopulating. `_selected_ids` and `_auto_acked_ids` are reconciled with the new dataset (`&=` set intersection) after the loop. Selection state is rendered correctly in the initial `add_row` calls — `_row_marker` checks `_selected_ids` and `_auto_acked_ids` at insert time.
 
 ### Status bar
-`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains five buttons:
+`StatusBar(Horizontal)` is docked inline (not `dock: bottom`) to avoid overlapping with `Footer`. Contains five buttons (styled purely via CSS — no `compact`/`flat`/`variant` args):
 - `1` / click: cycles scope `mine → team → all`
 - `2` / click: cycles status filter `all statuses → triggered → ack'd`
 - `3` / click: cycles urgency filter `all urgencies → high → low`
-- `4` / click: toggles auto-ack `autoack: off ↔ autoack: ON` (warning variant when on)
+- `4` / click: toggles auto-ack `4:auto-ack OFF ↔ 4:auto-ack ON`
 - `5` / click: cycles auto-refresh interval `↻ off → ↻ 3s → ↻ 5s → ↻ 10s`
 
 The count label shows `N incident(s)` and appends `↻` while a refresh is in progress (preserving the last count).
@@ -102,12 +104,14 @@ Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc
 - `IncScope.ALL`: `pd.incidents.fetch()`
 
 ### Auto-refresh
-`IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s. Changing filters resets the timer but does not trigger an immediate reload. Timer is managed via `_schedule_next_refresh()` called at the end of `_populate_table` and `_set_error`. `_schedule_next_refresh` checks `_suspended` and skips scheduling while the screen is suspended.
+`IncidentsScreen` uses a one-shot `set_timer` (not `set_interval`) so the countdown starts **after** the API call finishes. Default interval: 5s. Cycle: off → 3s → 5s → 10s.
+
+`_schedule_next_refresh()` cancels any live timer then arms a new one if `_refresh_time > 0` and not `_suspended`. It is called at the end of `_populate_table`, `_set_error`, and `_on_refresh_time_changed`. Changing the refresh interval reschedules immediately; changing other filters does not.
 
 `on_screen_suspend` sets `_suspended = True` and cancels any live timer. `on_screen_resume` clears `_suspended` and calls `_schedule_next_refresh()`. This stops all API calls while `IncidentDetailScreen` is open.
 
 ### Auto-ack
-When `_auto_ack` is `True`, `_populate_table` calls `_do_auto_ack(incs)` at the end of every table load. The worker filters the fetched list to incidents where `status == "triggered"` AND the user's `uid` appears in `assignments[*].assignee.id` — regardless of the active scope (mine/team/all). Matching incidents are acked silently (no confirmation dialog), `_auto_acked_ids` is set to their IDs, a toast is posted via `app.notify()`, and `load_incidents()` is called to reload. On the reload triggered by the ack, `_populate_table` renders those rows with a `[bold yellow]![/bold yellow]` marker for one cycle. `_auto_acked_ids` is reset at the start of each `_do_auto_ack` call so stale markers don't persist beyond one ack batch.
+When `_auto_ack` is `True`, `_populate_table` calls `_do_auto_ack(incs)` at the end of every table load. The worker filters the fetched list to incidents where `status == "triggered"` AND the user's `uid` appears in `assignments[*].assignee.id` — regardless of the active scope (mine/team/all). If nothing matches, it returns early. Otherwise it sets `_auto_acked_ids` to the matching IDs, acks them silently, posts a toast via `app.notify()`, then calls `app.call_from_thread(self._populate_table, incs)` directly with the already-fetched list (not `load_incidents()`). On that repopulate, `_row_marker` renders the auto-acked rows with `!`. Stale `_auto_acked_ids` are cleaned up by `_populate_table`'s `&=` intersection on every load.
 
 ### Persistent UI prefs
 `TuiApp` reads/writes `~/.local/state/pdh-ng/ui.yaml` (path constant: `_PREFS_PATH`). Stored keys:
@@ -127,7 +131,7 @@ Set up in `TuiApp._setup_logging()` called from `__init__`. Controlled by config
 `Users` and `Teams` methods cache with a 30s TTL using a two-method pattern: the public method calls `ttl_hash()` at invocation time and passes it to a `@lru_cache`-decorated private method (e.g. `get` → `_get_cached`). This ensures the TTL bucket changes each 30s window and the cache actually expires. Do NOT put `ttl_hash()` as a default argument — default args are evaluated once at import time, so the cache would never expire. `Incidents` is never cached — always fetches live.
 
 ### Screen compose vs on_mount
-Do NOT access `self.app` inside `IncidentsScreen.compose()` — the screen may be embedded as a widget in tests before the app reference is fully wired. Read all prefs in `on_mount()` instead.
+All prefs (`inc_scope`, `inc_status`, `inc_urgency`, `refresh_time`, `auto_ack`, `visible_columns`) are passed to `IncidentsScreen.__init__` by `TuiApp.on_mount`. The screen initialises its fields from these args and does not read `self.app` during `compose()` or `on_mount()`. Event handlers write back to `self.app` to persist state.
 
 ### on_unmount caveat
 In `on_unmount`, children are already removed — `query_one` will raise `NoMatches`. Track mutable state as screen fields (`self._inc_scope`, `self._inc_status`, `self._inc_urgency`) updated via event handlers. `on_unmount` only calls `self.app.save_prefs()` — it does not write to `_prefs` directly.
@@ -136,7 +140,7 @@ In `on_unmount`, children are already removed — `query_one` will raise `NoMatc
 
 Currently running **Textual 8.x** (requires `rich>=14.2.0`). Key API notes:
 - `call_from_thread` lives on `App` only, not `Widget`/`Screen`
-- `Button(compact=True, flat=True)` for inline status bar buttons
+- `StatusBar` buttons are plain `Button()` — no `compact`/`flat`/`variant`; appearance controlled entirely by TCSS
 - `ModalScreen.dismiss(value)` passes value to the `push_screen` callback
 - Bindings use `Binding(key, action, description, show=False)` to hide from footer
 - `set_timer(interval, cb)` fires once after `interval` seconds (one-shot); `set_interval` is repeating

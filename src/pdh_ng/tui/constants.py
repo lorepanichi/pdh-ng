@@ -39,11 +39,6 @@ _INC_STATUS_LABELS = {
     IncStatus.TRIGGERED: "2:triggered   ",
     IncStatus.ACK: "2:acknowledged",
 }
-_INC_STATUS_VARIANTS = {
-    IncStatus.ALL: "default",
-    IncStatus.TRIGGERED: "error",
-    IncStatus.ACK: "warning",
-}
 _INC_STATUS_API = {
     IncStatus.ALL: [STATUS_TRIGGERED, STATUS_ACK],
     IncStatus.TRIGGERED: [STATUS_TRIGGERED],
@@ -56,11 +51,6 @@ _INC_URGENCY_LABELS = {
     IncUrgency.HIGH: "3:high urgency ",
     IncUrgency.LOW: "3:low urgency  ",
 }
-_INC_URGENCY_VARIANTS = {
-    IncUrgency.ALL: "default",
-    IncUrgency.HIGH: "error",
-    IncUrgency.LOW: "primary",
-}
 _INC_URGENCY_API = {
     IncUrgency.ALL: [URGENCY_HIGH, URGENCY_LOW],
     IncUrgency.HIGH: [URGENCY_HIGH],
@@ -71,11 +61,6 @@ _AUTO_ACK_LABELS = {
     False: "4:auto-ack OFF",
     True: "4:auto-ack ON ",
 }
-_AUTO_ACK_VARIANTS = {
-    False: "default",
-    True: "warning",
-}
-
 _REFRESH_TIME_CYCLE = list(RefreshTime)
 _REFRESH_TIME_LABELS = {
     RefreshTime.OFF: "5:↻ off",

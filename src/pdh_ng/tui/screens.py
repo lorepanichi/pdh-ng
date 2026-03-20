@@ -13,7 +13,7 @@ from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
-from ..pd import STATUS_ACK, STATUS_TRIGGERED
+from ..pd import STATUS_TRIGGERED
 from .constants import (
     _INC_STATUS_API,
     _INC_URGENCY_API,
@@ -103,22 +103,30 @@ class IncidentsScreen(Screen):
 
     # -- lifecycle --
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        inc_scope: IncScope = IncScope.MINE,
+        inc_status: IncStatus = IncStatus.ALL,
+        inc_urgency: IncUrgency = IncUrgency.ALL,
+        refresh_time: RefreshTime = RefreshTime.S5,
+        auto_ack: bool = False,
+        visible_columns: list[str] | None = None,
+    ) -> None:
         super().__init__()
-        self._inc_scope: IncScope = IncScope.MINE
-        self._inc_status: IncStatus = IncStatus.ALL
-        self._inc_urgency: IncUrgency = IncUrgency.ALL
-        self._current_statuses: list[str] = [STATUS_TRIGGERED, STATUS_ACK]
-        self._current_urgencies: list[str] = _INC_URGENCY_API[IncUrgency.ALL]
+        self._inc_scope: IncScope = inc_scope
+        self._inc_status: IncStatus = inc_status
+        self._inc_urgency: IncUrgency = inc_urgency
+        self._current_statuses: list[str] = _INC_STATUS_API[inc_status]
+        self._current_urgencies: list[str] = _INC_URGENCY_API[inc_urgency]
         self._title_filter: str = ""
         self._incident_ids: list[str] = []
         self._incidents_cache: dict[str, dict] = {}
         self._selected_ids: set[str] = set()
-        self._visible_columns: list[str] = []  # loaded from app prefs on mount
-        self._refresh_time: RefreshTime = RefreshTime.S5
+        self._visible_columns: list[str] = visible_columns or []
+        self._refresh_time: RefreshTime = refresh_time
         self._refresh_timer: Timer | None = None
         self._suspended: bool = False
-        self._auto_ack: bool = False
+        self._auto_ack: bool = auto_ack
         self._auto_acked_ids: set[str] = set()
 
     def compose(self) -> ComposeResult:
@@ -134,25 +142,17 @@ class IncidentsScreen(Screen):
             placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel",
             id="title-filter",
         )
-        yield StatusBar(id="status-bar")
+        yield StatusBar(
+            id="status-bar",
+            inc_scope=self._inc_scope,
+            inc_status=self._inc_status,
+            inc_urgency=self._inc_urgency,
+            refresh_time=self._refresh_time,
+            auto_ack=self._auto_ack,
+        )
         yield Footer()
 
     def on_mount(self) -> None:
-        self._inc_scope = self.app.inc_scope
-        self._inc_status = self.app.inc_status
-        self._inc_urgency = self.app.inc_urgency
-        self._refresh_time = self.app.refresh_time
-        self._auto_ack = self.app.auto_ack
-        self._current_statuses = _INC_STATUS_API[self._inc_status]
-        self._current_urgencies = _INC_URGENCY_API[self._inc_urgency]
-        self._visible_columns = self.app.visible_columns
-        bar = self.query_one("#status-bar", StatusBar)
-        bar._inc_scope = self._inc_scope
-        bar._inc_status = self._inc_status
-        bar._inc_urgency = self._inc_urgency
-        bar._refresh_time = self._refresh_time
-        bar._auto_ack = self._auto_ack
-        bar._sync_buttons()
         self._rebuild_columns()
         self.load_incidents()
 
