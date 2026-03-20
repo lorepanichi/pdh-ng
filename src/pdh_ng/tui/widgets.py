@@ -69,20 +69,22 @@ class StatusBar(Horizontal):
         self._inc_urgency: IncUrgency = inc_urgency
         self._refresh_time: RefreshTime = refresh_time
         self._auto_ack: bool = auto_ack
-        self._count_text: str = ""
+        self._status_text: str = ""
 
     def compose(self) -> ComposeResult:
-        yield Button(_INC_SCOPE_LABELS[self._inc_scope], id="scope-btn", compact=True, flat=True)
+        yield Button(
+            _INC_SCOPE_LABELS[self._inc_scope], id="inc-scope-btn", compact=True, flat=True
+        )
         yield Button(
             _INC_STATUS_LABELS[self._inc_status],
-            id="status-btn",
+            id="inc-status-btn",
             variant=_INC_STATUS_VARIANTS[self._inc_status],
             compact=True,
             flat=True,
         )
         yield Button(
             _INC_URGENCY_LABELS[self._inc_urgency],
-            id="urgency-btn",
+            id="inc-urgency-btn",
             variant=_INC_URGENCY_VARIANTS[self._inc_urgency],
             compact=True,
             flat=True,
@@ -96,33 +98,39 @@ class StatusBar(Horizontal):
         )
         yield Button(
             _REFRESH_TIME_LABELS[self._refresh_time],
-            id="refresh-btn",
+            id="refresh-time-btn",
             compact=True,
             flat=True,
         )
-        yield Label("", id="count-label")
+        yield Label("", id="status-label")
 
-    def set_count(self, count: int, title_filter: str = "", scope: str = "") -> None:
+    def set_status(self, inc_count: int, title_filter: str = "") -> None:
         suffix = f"  filter: {title_filter!r}" if title_filter else ""
-        self._count_text = f"{count} incident(s){suffix}"
-        self.query_one("#count-label", Label).update(f"   {self._count_text}")
+        self._status_text = f"{inc_count} incident(s){suffix}"
+        self.query_one("#status-label", Label).update(f"   {self._status_text}")
 
     def set_loading(self) -> None:
-        base = f"{self._count_text}  " if self._count_text else ""
-        self.query_one("#count-label", Label).update(f"   {base}↻")
+        base = f"{self._status_text}  " if self._status_text else ""
+        self.query_one("#status-label", Label).update(f"   {base}↻")
 
     def set_error(self, message: str) -> None:
-        self.query_one("#count-label", Label).update(f"   [bold red]{message}[/bold red]")
+        self.query_one("#status-label", Label).update(f"   [bold red]{message}[/bold red]")
 
     def _sync_buttons(self) -> None:
-        self.query_one("#scope-btn", Button).label = _INC_SCOPE_LABELS[self._inc_scope]
-        btn = self.query_one("#status-btn", Button)
-        btn.label = _INC_STATUS_LABELS[self._inc_status]
-        btn.variant = _INC_STATUS_VARIANTS[self._inc_status]
-        self.query_one("#refresh-btn", Button).label = _REFRESH_TIME_LABELS[self._refresh_time]
-        urgency_btn = self.query_one("#urgency-btn", Button)
-        urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
-        urgency_btn.variant = _INC_URGENCY_VARIANTS[self._inc_urgency]
+        inc_scope_btn = self.query_one("#inc-scope-btn", Button)
+        inc_scope_btn.label = _INC_SCOPE_LABELS[self._inc_scope]
+
+        inc_status_btn = self.query_one("#inc-status-btn", Button)
+        inc_status_btn.label = _INC_STATUS_LABELS[self._inc_status]
+        inc_status_btn.variant = _INC_STATUS_VARIANTS[self._inc_status]
+
+        inc_urgency_btn = self.query_one("#inc-urgency-btn", Button)
+        inc_urgency_btn.label = _INC_URGENCY_LABELS[self._inc_urgency]
+        inc_urgency_btn.variant = _INC_URGENCY_VARIANTS[self._inc_urgency]
+
+        refresh_time_btn = self.query_one("#refresh-time-btn", Button)
+        refresh_time_btn.label = _REFRESH_TIME_LABELS[self._refresh_time]
+
         auto_ack_btn = self.query_one("#auto-ack-btn", Button)
         auto_ack_btn.label = _AUTO_ACK_LABELS[self._auto_ack]
         auto_ack_btn.variant = _AUTO_ACK_VARIANTS[self._auto_ack]
@@ -156,19 +164,19 @@ class StatusBar(Horizontal):
         self._sync_buttons()
         self.post_message(self.AutoAckChanged(self._auto_ack))
 
-    @on(Button.Pressed, "#scope-btn")
+    @on(Button.Pressed, "#inc-scope-btn")
     def _on_scope_btn(self) -> None:
         self.cycle_scope()
 
-    @on(Button.Pressed, "#status-btn")
+    @on(Button.Pressed, "#inc-status-btn")
     def _on_status_btn(self) -> None:
         self.cycle_status()
 
-    @on(Button.Pressed, "#urgency-btn")
+    @on(Button.Pressed, "#inc-urgency-btn")
     def _on_urgency_btn(self) -> None:
         self.cycle_urgency()
 
-    @on(Button.Pressed, "#refresh-btn")
+    @on(Button.Pressed, "#refresh-time-btn")
     def _on_refresh_btn(self) -> None:
         self.cycle_refresh()
 

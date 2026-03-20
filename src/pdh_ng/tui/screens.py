@@ -59,21 +59,6 @@ def _apply_title_filter(incs: list[dict], title_filter: str) -> list[dict]:
     return [i for i in incs if title_filter.lower() in i.get("title", "").lower()]
 
 
-def _urgency_marker(inc: dict, auto_acked: bool = False) -> str:
-    urgency = inc.get("urgency", "")
-    symbol = "▋" if not auto_acked else "!"
-    if urgency == "high":
-        return f"[bold red]{symbol}[/bold red]"
-    if urgency == "low":
-        return f"[bold blue]{symbol}[/bold blue]"
-    return symbol
-
-
-def _row_marker(inc: dict, selected: bool, auto_acked: bool = False) -> str:
-    sel = "[bold green]✓[/bold green]" if selected else " "
-    return _urgency_marker(inc, auto_acked) + sel
-
-
 def _cell_value(inc: dict, col: str) -> str:
     match col:
         case "id":
@@ -103,7 +88,7 @@ class IncidentsScreen(Screen):
         Binding("3", "cycle_urgency", "urgency filter", show=False),
         Binding("4", "cycle_auto_ack", "auto-ack toggle", show=False),
         Binding("5", "cycle_refresh", "refresh interval", show=False),
-        Binding("enter", "view_detail", "Detail", priority=True),
+        Binding("i", "inspect", "Inspect"),
         Binding("o", "open_url", "↗"),
         Binding("a", "ack_selected", "Ack"),
         Binding("r", "resolve_selected", "Resolve"),
@@ -199,10 +184,25 @@ class IncidentsScreen(Screen):
 
     # -- table / data --
 
+    @staticmethod
+    def _urgency_marker(inc: dict) -> str:
+        urgency = inc.get("urgency", "")
+        if urgency == "high":
+            return "[bold red]▋[/bold red]"
+        if urgency == "low":
+            return "[bold blue]▋[/bold blue]"
+        return " "
+
+    def _row_marker(self, inc: dict) -> str:
+        inc_id = inc["id"]
+        ack = "[bold yellow]![/bold yellow]" if inc_id in self._auto_acked_ids else " "
+        sel = "[bold green]✓[/bold green]" if inc_id in self._selected_ids else " "
+        return self._urgency_marker(inc) + ack + sel
+
     def _rebuild_columns(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         table.clear(columns=True)
-        table.add_column("", width=2)
+        table.add_column("", width=3)
         table.add_columns(*self._visible_columns)
 
     @work(exclusive=True, thread=True)
@@ -228,7 +228,7 @@ class IncidentsScreen(Screen):
             else:
                 incs = list(pd_client.incidents.fetch(statuses=statuses, urgencies=urgencies))
             incs = _apply_title_filter(incs, title_filter)
-            app.call_from_thread(self._populate_table, incs, inc_scope, title_filter)
+            app.call_from_thread(self._populate_table, incs)
         except Exception as e:
             logger.exception("Error loading incidents")
             app.call_from_thread(self._set_error, str(e))
@@ -240,15 +240,16 @@ class IncidentsScreen(Screen):
         self.query_one("#status-bar", StatusBar).set_error(message)
         self._schedule_next_refresh()
 
-    def _populate_table(self, incs: list, inc_scope: IncScope, title_filter: str) -> None:
+    def _populate_table(self, incs: list) -> None:
         table = self.query_one("#incidents-table", DataTable)
-        cursor_row = table.cursor_row
-        cursor_id = (
-            self._incident_ids[cursor_row] if 0 <= cursor_row < len(self._incident_ids) else None
-        )
 
+        # capture the incident that the row cursor is pointing to
+        cursor_row = table.cursor_row
+        cursor_id = self._incident_ids[cursor_row] if self._incident_ids else None
+
+        # clear table columns to reset widths
         table.clear(columns=True)
-        table.add_column("", width=2)
+        table.add_column("", width=3)
         table.add_columns(*self._visible_columns)
         self._incident_ids = []
         self._incidents_cache = {}
@@ -258,22 +259,25 @@ class IncidentsScreen(Screen):
             self._incident_ids.append(inc_id)
             self._incidents_cache[inc_id] = inc
             cells = [_cell_value(inc, col) for col in self._visible_columns]
-            selected = inc_id in self._selected_ids
-            auto_acked = inc_id in self._auto_acked_ids
-            table.add_row(_row_marker(inc, selected, auto_acked), *cells, key=inc_id)
+            table.add_row(self._row_marker(inc), *cells, key=inc_id)
 
-        # remove stale incident IDs from the selected ones
+        # remove stale incident IDs
         self._selected_ids &= set(self._incident_ids)
+        self._auto_acked_ids &= set(self._incident_ids)
 
-        if cursor_id in self._incident_ids:
+        # keep the row cursor on the same incident
+        if cursor_id in self._incidents_cache:
             try:
                 table.move_cursor(row=table.get_row_index(cursor_id), scroll=True)
             except Exception:
                 pass
 
-        self.query_one("#status-bar", StatusBar).set_count(
-            len(incs), title_filter, inc_scope.name.lower()
+        # update status bar
+        self.query_one("#status-bar", StatusBar).set_status(
+            inc_count=len(incs),
+            title_filter=self._title_filter,
         )
+
         self._schedule_next_refresh()
         if self._auto_ack:
             self._do_auto_ack(incs)
@@ -342,6 +346,9 @@ class IncidentsScreen(Screen):
             self.query_one("#incidents-table").focus()
 
     def action_clear_or_hide_filter(self) -> None:
+        # this action is multipurpose:
+        # - if the title filter is visibile, reset
+        # - otherwise is an incident de-selection
         filter_input = self.query_one("#title-filter", Input)
         if filter_input.display:
             filter_input.display = False
@@ -351,21 +358,20 @@ class IncidentsScreen(Screen):
             self._selected_ids.clear()
             table = self.query_one("#incidents-table", DataTable)
             for i, inc_id in enumerate(self._incident_ids):
-                inc = self._incidents_cache.get(inc_id, {})
-                table.update_cell_at(Coordinate(i, 0), _row_marker(inc, False))
+                inc = self._incidents_cache[inc_id]
+                table.update_cell_at(Coordinate(i, 0), self._row_marker(inc))
 
     def action_toggle_select(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
+        if self._incident_ids:
             inc_id = self._incident_ids[row_idx]
-            inc = self._incidents_cache.get(inc_id, {})
             if inc_id in self._selected_ids:
                 self._selected_ids.discard(inc_id)
-                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, False))
             else:
                 self._selected_ids.add(inc_id)
-                table.update_cell_at(Coordinate(row_idx, 0), _row_marker(inc, True))
+            inc = self._incidents_cache[inc_id]
+            table.update_cell_at(Coordinate(row_idx, 0), self._row_marker(inc))
 
     def action_select_columns(self) -> None:
         self.app.push_screen(
@@ -379,16 +385,12 @@ class IncidentsScreen(Screen):
         self._visible_columns = selected
         self.app.visible_columns = selected
         self._rebuild_columns()
-        self._populate_table(
-            list(self._incidents_cache.values()),
-            self._inc_scope,
-            self._title_filter,
-        )
+        self._populate_table(list(self._incidents_cache.values()))
 
-    def action_view_detail(self) -> None:
+    def action_inspect(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
+        if self._incident_ids:
             inc_id = self._incident_ids[row_idx]
             inc = self._incidents_cache.get(inc_id)
             if inc is not None:
@@ -397,7 +399,7 @@ class IncidentsScreen(Screen):
     def action_open_url(self) -> None:
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
+        if self._incident_ids:
             inc = self._incidents_cache.get(self._incident_ids[row_idx])
             if inc:
                 url = inc.get("html_url", "")
@@ -408,12 +410,10 @@ class IncidentsScreen(Screen):
 
     def _get_target_incs(self) -> list[dict]:
         if self._selected_ids:
-            return [
-                self._incidents_cache[i] for i in self._selected_ids if i in self._incidents_cache
-            ]
+            return [self._incidents_cache[i] for i in self._selected_ids]
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
-        if 0 <= row_idx < len(self._incident_ids):
+        if self._incident_ids:
             inc_id = self._incident_ids[row_idx]
             if inc_id in self._incidents_cache:
                 return [self._incidents_cache[inc_id]]
@@ -432,7 +432,7 @@ class IncidentsScreen(Screen):
         app = self.app
         try:
             app.pd.incidents.ack(incs)
-            logger.info("Acked %d incidents", len(incs))
+            logger.debug("Acked %d incidents", len(incs))
         except Exception as e:
             logger.exception("Error acking incidents")
             app.call_from_thread(self._set_error, str(e))
@@ -460,9 +460,9 @@ class IncidentsScreen(Screen):
             app.call_from_thread(self._set_error, str(e))
             return
         app.call_from_thread(
-            app.notify, f"⚡ Auto-acked {len(to_ack)} incident(s)", severity="warning"
+            app.notify, f"! Auto-acked {len(to_ack)} incident(s)", severity="warning"
         )
-        app.call_from_thread(self.load_incidents)
+        app.call_from_thread(self._populate_table, incs)
 
     def action_resolve_selected(self) -> None:
         incs = self._get_target_incs()
@@ -477,7 +477,7 @@ class IncidentsScreen(Screen):
         app = self.app
         try:
             app.pd.incidents.resolve(incs)
-            logger.info("Resolved %d incidents", len(incs))
+            logger.debug("Resolved %d incidents", len(incs))
         except Exception as e:
             logger.exception("Error resolving incidents")
             app.call_from_thread(self._set_error, str(e))
@@ -497,7 +497,7 @@ class IncidentsScreen(Screen):
         app = self.app
         try:
             app.pd.incidents.snooze(incs, duration)
-            logger.info("Snoozed %d incidents for %ds", len(incs), duration)
+            logger.debug("Snoozed %d incidents for %ds", len(incs), duration)
         except Exception as e:
             logger.exception("Error snoozing incidents")
             app.call_from_thread(self._set_error, str(e))

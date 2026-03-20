@@ -11,8 +11,6 @@ from pdh_ng.tui.screens import (
     _cell_value,
     _colored,
     _fmt_age,
-    _row_marker,
-    _urgency_marker,
 )
 from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.widgets import ConfirmDialog, SnoozeDialog, StatusBar
@@ -50,22 +48,22 @@ class TestColored:
 
 class TestUrgencyMarker:
     def test_high_urgency(self):
-        result = _urgency_marker({"urgency": "high"})
+        result = IncidentsScreen._urgency_marker({"urgency": "high"})
         assert "red" in result
         assert "▋" in result
 
     def test_low_urgency(self):
-        result = _urgency_marker({"urgency": "low"})
+        result = IncidentsScreen._urgency_marker({"urgency": "low"})
         assert "blue" in result
         assert "▋" in result
 
     def test_missing_urgency(self):
-        result = _urgency_marker({})
-        assert result == "▋"
+        result = IncidentsScreen._urgency_marker({})
+        assert result == " "
 
     def test_unknown_urgency(self):
-        result = _urgency_marker({"urgency": "unknown"})
-        assert result == "▋"
+        result = IncidentsScreen._urgency_marker({"urgency": "unknown"})
+        assert result == " "
 
 
 class TestApplyTitleFilter:
@@ -242,7 +240,7 @@ class TestIncidentsScreenAutoRefresh:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._populate_table([], IncScope.MINE, "")
+                screen._populate_table([])
                 assert screen._refresh_timer is not None
 
     async def test_next_refresh_scheduled_after_error(self):
@@ -468,7 +466,7 @@ _SAMPLE_INC = {
 }
 
 
-class TestIncidentsScreenViewDetail:
+class TestIncidentsScreenInspect:
     async def test_pushes_detail_screen_for_cursor_row(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -476,7 +474,7 @@ class TestIncidentsScreenViewDetail:
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
                 with patch.object(pilot.app, "push_screen") as mock_push:
-                    screen.action_view_detail()
+                    screen.action_inspect()
                     await pilot.pause()
                     mock_push.assert_called_once()
                     assert isinstance(mock_push.call_args[0][0], IncidentDetailScreen)
@@ -488,7 +486,7 @@ class TestIncidentsScreenViewDetail:
                 screen._incident_ids = []
                 screen._incidents_cache = {}
                 with patch.object(pilot.app, "push_screen") as mock_push:
-                    screen.action_view_detail()
+                    screen.action_inspect()
                     await pilot.pause()
                     mock_push.assert_not_called()
 
@@ -499,7 +497,7 @@ class TestIncidentsScreenViewDetail:
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {}
                 with patch.object(pilot.app, "push_screen") as mock_push:
-                    screen.action_view_detail()
+                    screen.action_inspect()
                     await pilot.pause()
                     mock_push.assert_not_called()
 
@@ -509,7 +507,7 @@ class TestIncidentsScreenToggleSelect:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                screen._populate_table([_SAMPLE_INC])
                 await pilot.pause()
 
                 screen.action_toggle_select()
@@ -521,7 +519,7 @@ class TestIncidentsScreenToggleSelect:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                screen._populate_table([_SAMPLE_INC])
                 await pilot.pause()
                 screen._selected_ids.add("I1")
 
@@ -542,7 +540,7 @@ class TestIncidentsScreenToggleSelect:
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
-                screen._populate_table([_SAMPLE_INC], IncScope.MINE, "")
+                screen._populate_table([_SAMPLE_INC])
                 await pilot.pause()
                 screen._selected_ids.add("I1")
 
@@ -638,32 +636,40 @@ class TestIncidentsScreenBulkActions:
 
 
 class TestRowMarker:
+    def _screen_with(self, selected_ids=None, auto_acked_ids=None) -> IncidentsScreen:
+        screen = IncidentsScreen.__new__(IncidentsScreen)
+        screen._selected_ids = set(selected_ids or [])
+        screen._auto_acked_ids = set(auto_acked_ids or [])
+        return screen
+
     def test_normal_high_urgency(self):
-        inc = {"urgency": "high"}
-        result = _row_marker(inc, False)
+        screen = self._screen_with()
+        result = screen._row_marker({"id": "I1", "urgency": "high"})
         assert "red" in result
         assert "▋" in result
 
     def test_normal_selected(self):
-        inc = {"urgency": "low"}
-        result = _row_marker(inc, True)
+        screen = self._screen_with(selected_ids=["I1"])
+        result = screen._row_marker({"id": "I1", "urgency": "low"})
         assert "✓" in result
 
     def test_auto_acked_shows_bang(self):
-        inc = {"urgency": "high"}
-        result = _row_marker(inc, False, auto_acked=True)
+        screen = self._screen_with(auto_acked_ids=["I1"])
+        result = screen._row_marker({"id": "I1", "urgency": "high"})
         assert "!" in result
-        assert "▋" not in result
+        assert "▋" in result
 
     def test_auto_acked_selected_shows_both(self):
-        inc = {"urgency": "high"}
-        result = _row_marker(inc, True, auto_acked=True)
+        screen = self._screen_with(selected_ids=["I1"], auto_acked_ids=["I1"])
+        result = screen._row_marker({"id": "I1", "urgency": "high"})
         assert "!" in result
         assert "✓" in result
 
-    def test_auto_acked_false_is_normal(self):
-        inc = {"urgency": "high"}
-        assert _row_marker(inc, False, auto_acked=False) == _row_marker(inc, False)
+    def test_unselected_unacked_has_no_markers(self):
+        screen = self._screen_with()
+        result = screen._row_marker({"id": "I1", "urgency": "high"})
+        assert "✓" not in result
+        assert "!" not in result
 
 
 _TRIGGERED_INC = {
@@ -761,7 +767,7 @@ class TestAutoAckStatePrefs:
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._auto_acked_ids = {"I1"}
-                screen._populate_table([_TRIGGERED_INC], IncScope.MINE, "")
+                screen._populate_table([_TRIGGERED_INC])
                 await pilot.pause()
                 from textual.coordinate import Coordinate
                 from textual.widgets import DataTable
