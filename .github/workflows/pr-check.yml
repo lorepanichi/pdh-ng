@@ -25,12 +25,8 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v1
-      - name: Prepare dev env
-        run: task dependency-install
-      - name: Lint and tests
-        run: |
-          source .venv/bin/activate
-          task test
+      - run: task dependency-install
+      - run: source .venv/bin/activate && task test
 
   build-test:
     name: "Build wheel"
