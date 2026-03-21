@@ -88,32 +88,6 @@ SnoozeDialog {
     margin: 0 1;
 }
 
-ConfirmDialog {
-    align: center middle;
-}
-
-#confirm-dialog {
-    background: $panel;
-    border: thick $accent;
-    padding: 2 4;
-    width: 50;
-    height: auto;
-}
-
-#confirm-dialog Label {
-    margin-bottom: 1;
-    text-align: center;
-    width: 100%;
-}
-
-#confirm-buttons {
-    height: auto;
-    align: center middle;
-}
-
-#confirm-buttons Button {
-    margin: 0 1;
-}
 
 #incident-info {
     margin: 1 2;

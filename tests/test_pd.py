@@ -292,4 +292,3 @@ class TestPagerDuty:
         with patch("pdh_ng.pd.RestApiV2Client", return_value=mock_session):
             with pytest.raises(UnauthorizedException):
                 PagerDuty(cfg)
-

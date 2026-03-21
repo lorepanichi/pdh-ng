@@ -197,29 +197,3 @@ class SnoozeDialog(ModalScreen):
     @on(Button.Pressed, "#snooze-8h")
     def _snooze_8h(self) -> None:
         self.dismiss(28800)
-
-
-class ConfirmDialog(ModalScreen):
-    BINDINGS = [("escape", "cancel", "Cancel")]
-
-    def __init__(self, message: str) -> None:
-        super().__init__()
-        self._message = message
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="confirm-dialog"):
-            yield Label(self._message)
-            with Horizontal(id="confirm-buttons"):
-                yield Button("Yes", id="confirm-yes", variant="error")
-                yield Button("No", id="confirm-no", variant="primary")
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-    @on(Button.Pressed, "#confirm-yes")
-    def _confirmed(self) -> None:
-        self.dismiss(True)
-
-    @on(Button.Pressed, "#confirm-no")
-    def _cancelled(self) -> None:
-        self.dismiss(False)

@@ -2,16 +2,16 @@ from textual.app import App, ComposeResult
 from textual.widgets import Label, SelectionList
 
 from pdh_ng.tui.constants import (
+    _INC_URGENCY_LABELS,
+    _REFRESH_TIME_CYCLE,
+    _REFRESH_TIME_LABELS,
     ALL_COLUMNS,
     IncScope,
     IncStatus,
     IncUrgency,
     RefreshTime,
-    _INC_URGENCY_LABELS,
-    _REFRESH_TIME_CYCLE,
-    _REFRESH_TIME_LABELS,
 )
-from pdh_ng.tui.widgets import ConfirmDialog, ColumnSelectorScreen, SnoozeDialog, StatusBar
+from pdh_ng.tui.widgets import ColumnSelectorScreen, SnoozeDialog, StatusBar
 
 
 class StatusBarApp(App):
@@ -322,7 +322,6 @@ class TestStatusBarAutoAck:
 
     async def test_auto_ack_button_label_off(self):
         async with StatusBarApp().run_test() as pilot:
-            bar = pilot.app.query_one("#status-bar", StatusBar)
             await pilot.pause()
             label = str(pilot.app.query_one("#auto-ack-btn").label)
             assert "OFF" in label
@@ -352,32 +351,6 @@ class TestSnoozeDialog:
             await pilot.press("escape")
             await pilot.pause()
         assert pilot.app.result is None
-
-
-class TestConfirmDialog:
-    async def test_yes_dismisses_true(self):
-        async with ModalApp(ConfirmDialog("Are you sure?")).run_test() as pilot:
-            await pilot.click("#confirm-yes")
-            await pilot.pause()
-        assert pilot.app.result is True
-
-    async def test_no_dismisses_false(self):
-        async with ModalApp(ConfirmDialog("Are you sure?")).run_test() as pilot:
-            await pilot.click("#confirm-no")
-            await pilot.pause()
-        assert pilot.app.result is False
-
-    async def test_escape_dismisses_false(self):
-        async with ModalApp(ConfirmDialog("Are you sure?")).run_test() as pilot:
-            await pilot.press("escape")
-            await pilot.pause()
-        assert pilot.app.result is False
-
-    async def test_message_shown(self):
-        async with ModalApp(ConfirmDialog("Delete incident?")).run_test() as pilot:
-            await pilot.pause()
-            label = pilot.app.screen.query_one("#confirm-dialog Label", Label)
-            assert "Delete incident?" in str(label.render())
 
 
 class TestColumnSelectorScreen:

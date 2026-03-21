@@ -1,7 +1,7 @@
-name: Sanity Checks
+name: Release
 on:
-  pull_request:
-    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
@@ -25,21 +25,18 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v1
-      - name: Prepare dev env
-        run: task dependency-install
-      - name: Lint and tests
-        run: |
-          source .venv/bin/activate
-          task test
+      - run: task dependency-install
+      - run: source .venv/bin/activate && task test
 
-  build-test:
-    name: "Build wheel"
-    needs:
-      - pre-commit
-      - test
+  release:
+    needs: [pre-commit, test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -48,4 +45,6 @@ jobs:
           enable-cache: true
       - uses: arduino/setup-task@v1
       - run: task dependency-install
-      - run: uv build
+      - uses: python-semantic-release/python-semantic-release@v9
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}

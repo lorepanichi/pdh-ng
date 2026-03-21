@@ -5,7 +5,7 @@ description = "PDH New Generation"
 authors = [
     {name = "Lorenzo Panichi", email = "lorenzo@panichi.org"}
 ]
-license = {text = "GPL-3.0-or-later"}
+license = {text = "MIT"}
 urls = {"Source" = "https://github.com/lorepanichi/pdh-ng"}
 readme = "README.md"
 requires-python = ">=3.12"
@@ -38,6 +38,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+build_command = "uv build"
+tag_format = "v{version}"
+upload_to_pypi = false
 
 [tool.ruff]
 line-length = 100

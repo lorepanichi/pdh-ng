@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from pdh_ng.config import DEFAULTS, REQUIRED_KEYS, Config, _env_var, load_and_validate
+from pdh_ng.config import REQUIRED_KEYS, Config, _env_var, load_and_validate
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,6 @@ class TestConfig:
         cfg["apikey"] = "abc"
         assert "apikey" in cfg
         assert "uid" not in cfg
-
 
 
 class TestLoadAndValidate:

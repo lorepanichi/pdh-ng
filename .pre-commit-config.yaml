@@ -1,16 +1,7 @@
-repos:
-  - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.93.8
-    hooks:
-      - id: trufflehog
-        args:
-          - git
-          - file://.
-          - --since-commit
-          - HEAD
-          - --only-verified
-          - --fail
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 
+repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -21,9 +12,20 @@ repos:
       - id: check-symlinks
       - id: detect-private-key
 
-  -   repo: https://github.com/charliermarsh/ruff-pre-commit
-      rev: v0.15.6
-      hooks:
-      -   id: ruff-check
-          args: [--fix]
-      -   id: ruff-format
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.15.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.4.1
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.93.8
+    hooks:
+      - id: trufflehog

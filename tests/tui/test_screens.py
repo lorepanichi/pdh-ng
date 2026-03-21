@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from textual.app import App, ComposeResult
 from textual.widgets import Input
 
+from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.screens import (
     IncidentDetailScreen,
     IncidentsScreen,
@@ -12,8 +13,7 @@ from pdh_ng.tui.screens import (
     _colored,
     _fmt_age,
 )
-from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
-from pdh_ng.tui.widgets import ConfirmDialog, SnoozeDialog, StatusBar
+from pdh_ng.tui.widgets import SnoozeDialog, StatusBar
 
 
 class TestFmtAge:
@@ -558,21 +558,18 @@ class TestIncidentsScreenToggleSelect:
 
 
 class TestIncidentsScreenBulkActions:
-    async def test_ack_pushes_confirm_dialog_for_cursor_incident(self):
+    async def test_ack_calls_do_ack_for_cursor_incident(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
-                with patch.object(pilot.app, "push_screen") as mock_push:
+                with patch.object(screen, "_do_ack") as mock_ack:
                     screen.action_ack_selected()
                     await pilot.pause()
-                    mock_push.assert_called_once()
-                    dialog = mock_push.call_args[0][0]
-                    assert isinstance(dialog, ConfirmDialog)
-                    assert "1" in dialog._message
+                    mock_ack.assert_called_once_with([_SAMPLE_INC])
 
-    async def test_ack_pushes_confirm_dialog_for_selected_incidents(self):
+    async def test_ack_calls_do_ack_for_selected_incidents(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
@@ -580,13 +577,27 @@ class TestIncidentsScreenBulkActions:
                 screen._incident_ids = ["I1", "I2"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC, "I2": inc2}
                 screen._selected_ids = {"I1", "I2"}
-                with patch.object(pilot.app, "push_screen") as mock_push:
+                with patch.object(screen, "_do_ack") as mock_ack:
                     screen.action_ack_selected()
                     await pilot.pause()
-                    mock_push.assert_called_once()
-                    dialog = mock_push.call_args[0][0]
-                    assert isinstance(dialog, ConfirmDialog)
-                    assert "2" in dialog._message
+                    mock_ack.assert_called_once()
+                    assert len(mock_ack.call_args[0][0]) == 2
+
+    async def test_do_ack_notifies_on_success(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                pilot.app.pd = MagicMock()
+                with (
+                    patch.object(screen, "_populate_table"),
+                    patch.object(pilot.app, "notify") as mock_notify,
+                ):
+                    screen._do_ack([_SAMPLE_INC])
+                    await pilot.pause()
+                    await pilot.pause()
+                    mock_notify.assert_called_once()
+                    assert "1" in mock_notify.call_args[0][0]
 
     async def test_ack_does_nothing_when_no_incidents(self):
         with patch.object(IncidentsScreen, "load_incidents"):
@@ -597,19 +608,16 @@ class TestIncidentsScreenBulkActions:
                     await pilot.pause()
                     mock_push.assert_not_called()
 
-    async def test_resolve_pushes_confirm_dialog(self):
+    async def test_resolve_calls_do_resolve(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
-                with patch.object(pilot.app, "push_screen") as mock_push:
+                with patch.object(screen, "_do_resolve") as mock_resolve:
                     screen.action_resolve_selected()
                     await pilot.pause()
-                    mock_push.assert_called_once()
-                    dialog = mock_push.call_args[0][0]
-                    assert isinstance(dialog, ConfirmDialog)
-                    assert "Resolve" in dialog._message
+                    mock_resolve.assert_called_once_with([_SAMPLE_INC])
 
     async def test_resolve_does_nothing_when_no_incidents(self):
         with patch.object(IncidentsScreen, "load_incidents"):
@@ -708,7 +716,8 @@ class TestAutoAckFilter:
 
     def _filter(self, incs: list[dict], uid: str = "U1") -> list[dict]:
         return [
-            inc for inc in incs
+            inc
+            for inc in incs
             if inc.get("status") == "triggered"
             and any(a["assignee"]["id"] == uid for a in inc.get("assignments", []))
         ]
@@ -778,6 +787,7 @@ class TestAutoAckStatePrefs:
                 await pilot.pause()
                 from textual.coordinate import Coordinate
                 from textual.widgets import DataTable
+
                 table = pilot.app.query_one("#incidents-table", DataTable)
                 cell = table.get_cell_at(Coordinate(0, 0))
                 assert "!" in str(cell)
