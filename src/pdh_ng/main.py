@@ -1,4 +1,5 @@
 import argparse
+import importlib.metadata
 import os
 import sys
 
@@ -12,6 +13,12 @@ def main():
     parser = argparse.ArgumentParser(
         prog="pdh-ng",
         description="PDH New Generation.",
+    )
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {importlib.metadata.version('pdh-ng')}",
     )
     parser.add_argument(
         "-c",
