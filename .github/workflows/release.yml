@@ -43,6 +43,6 @@ jobs:
       - run: pip install uv
       - uses: arduino/setup-task@v1
       - run: task dependency-install
-      - uses: python-semantic-release/python-semantic-release@v9
+      - uses: python-semantic-release/python-semantic-release@v10
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

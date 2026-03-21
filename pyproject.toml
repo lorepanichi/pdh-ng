@@ -17,6 +17,9 @@ dependencies = [
     "textual>=8.1.1",
 ]
 
+[project.optional-dependencies]
+build = ["uv>=0.10.12"]
+
 [project.scripts]
 pdh-ng = "pdh_ng.main:main"
 
@@ -41,7 +44,12 @@ asyncio_mode = "auto"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-build_command = "uv build"
+build_command = """
+    python -m pip install -e '.[build]'
+    uv lock --upgrade-package "$PACKAGE_NAME"
+    git add uv.lock
+    uv build
+"""
 tag_format = "v{version}"
 upload_to_pypi = false
 
