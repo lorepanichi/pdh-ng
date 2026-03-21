@@ -2,14 +2,14 @@ from textual.app import App, ComposeResult
 from textual.widgets import Label, SelectionList
 
 from pdh_ng.tui.constants import (
+    _INC_URGENCY_LABELS,
+    _REFRESH_TIME_CYCLE,
+    _REFRESH_TIME_LABELS,
     ALL_COLUMNS,
     IncScope,
     IncStatus,
     IncUrgency,
     RefreshTime,
-    _INC_URGENCY_LABELS,
-    _REFRESH_TIME_CYCLE,
-    _REFRESH_TIME_LABELS,
 )
 from pdh_ng.tui.widgets import ColumnSelectorScreen, SnoozeDialog, StatusBar
 
@@ -322,7 +322,6 @@ class TestStatusBarAutoAck:
 
     async def test_auto_ack_button_label_off(self):
         async with StatusBarApp().run_test() as pilot:
-            bar = pilot.app.query_one("#status-bar", StatusBar)
             await pilot.pause()
             label = str(pilot.app.query_one("#auto-ack-btn").label)
             assert "OFF" in label

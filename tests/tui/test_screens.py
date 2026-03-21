@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from textual.app import App, ComposeResult
 from textual.widgets import Input
 
+from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.screens import (
     IncidentDetailScreen,
     IncidentsScreen,
@@ -12,7 +13,6 @@ from pdh_ng.tui.screens import (
     _colored,
     _fmt_age,
 )
-from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.widgets import SnoozeDialog, StatusBar
 
 
@@ -716,7 +716,8 @@ class TestAutoAckFilter:
 
     def _filter(self, incs: list[dict], uid: str = "U1") -> list[dict]:
         return [
-            inc for inc in incs
+            inc
+            for inc in incs
             if inc.get("status") == "triggered"
             and any(a["assignee"]["id"] == uid for a in inc.get("assignments", []))
         ]
@@ -786,6 +787,7 @@ class TestAutoAckStatePrefs:
                 await pilot.pause()
                 from textual.coordinate import Coordinate
                 from textual.widgets import DataTable
+
                 table = pilot.app.query_one("#incidents-table", DataTable)
                 cell = table.get_cell_at(Coordinate(0, 0))
                 assert "!" in str(cell)

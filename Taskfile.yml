@@ -8,11 +8,38 @@ tasks:
       - task -l
     silent: true
 
-  lint:
-    desc: Run ruff linter and formatter checks
+  dependency-install:
     cmds:
-      - uv run ruff check src/ tests/
-      - uv run ruff format --check src/ tests/
+      - uv sync
+    sources:
+      - uv.lock
+      - pyproject.toml
+    generates:
+      - uv.lock
+    method: checksum
+
+  install-hooks:
+    desc: Install pre-commit git hooks
+    cmds:
+      - pre-commit install
+    sources:
+      - .pre-commit-config.yaml
+    generates:
+      - .git/hooks/pre-commit
+      - .git/hooks/commit-msg
+    method: checksum
+
+  setup:
+    desc: Install dependencies and git hooks (run after clone)
+    cmds:
+      - task: dependency-install
+      - task: install-hooks
+
+  lint:
+    desc: Run ruff linter and formatter (auto-fix)
+    cmds:
+      - uv run ruff check --fix src/ tests/
+      - uv run ruff format src/ tests/
 
   test:
     desc: Run tests
@@ -25,24 +52,3 @@ tasks:
       - task: lint
       - task: test
       - pre-commit run -a
-
-  pre-commit:
-    cmds:
-      - pre-commit install
-    sources:
-      - .git/hooks/pre-commit
-      - .pre-commit-config.yaml
-    generates:
-      - .git/hooks/pre-commit
-    method: checksum
-
-  dependency-install:
-    cmds:
-      - uv sync
-    sources:
-      - uv.lock
-      - pyproject.toml
-    generates:
-      - uv.lock
-    method: checksum
-
