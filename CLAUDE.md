@@ -13,7 +13,7 @@ src/pdh_ng/
     ├── app.py        # TuiApp(App) — holds cfg, UI prefs, logging setup
     ├── constants.py  # IncScope, IncStatus, IncUrgency, RefreshTime enums + cycle/label/API lookup tables
     ├── screens.py    # IncidentsScreen, IncidentDetailScreen
-    ├── widgets.py    # StatusBar, ColumnSelectorScreen, SnoozeDialog, ConfirmDialog
+    ├── widgets.py    # StatusBar, ColumnSelectorScreen, SnoozeDialog
     └── styles.tcss   # Textual CSS
 
 tests/
@@ -109,6 +109,9 @@ Each button emits its own message: `ScopeChanged(inc_scope)`, `StatusChanged(inc
 `_schedule_next_refresh()` cancels any live timer then arms a new one if `_refresh_time > 0` and not `_suspended`. It is called at the end of `_populate_table`, `_set_error`, and `_on_refresh_time_changed`. Changing the refresh interval reschedules immediately; changing other filters does not.
 
 `on_screen_suspend` sets `_suspended = True` and cancels any live timer. `on_screen_resume` clears `_suspended` and calls `_schedule_next_refresh()`. This stops all API calls while `IncidentDetailScreen` is open.
+
+### Manual ack / resolve
+`action_ack_selected` and `action_resolve_selected` directly call `_do_ack`/`_do_resolve` — no confirm dialog. On success, `_do_ack` repopulates from `_incidents_cache` without a network round-trip; `_do_resolve` calls `load_incidents()`.
 
 ### Auto-ack
 When `_auto_ack` is `True`, `_populate_table` calls `_do_auto_ack(incs)` at the end of every table load. The worker filters the fetched list to incidents where `status == "triggered"` AND the user's `uid` appears in `assignments[*].assignee.id` — regardless of the active scope (mine/team/all). If nothing matches, it returns early. Otherwise it sets `_auto_acked_ids` to the matching IDs, acks them silently, posts a toast via `app.notify()`, then calls `app.call_from_thread(self._populate_table, incs)` directly with the already-fetched list (not `load_incidents()`). On that repopulate, `_row_marker` renders the auto-acked rows with `!`. Stale `_auto_acked_ids` are cleaned up by `_populate_table`'s `&=` intersection on every load.

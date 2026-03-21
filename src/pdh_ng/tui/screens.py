@@ -22,7 +22,7 @@ from .constants import (
     IncUrgency,
     RefreshTime,
 )
-from .widgets import ColumnSelectorScreen, ConfirmDialog, SnoozeDialog, StatusBar
+from .widgets import ColumnSelectorScreen, SnoozeDialog, StatusBar
 
 logger = logging.getLogger("pdh-ng.tui")
 
@@ -415,17 +415,13 @@ class IncidentsScreen(Screen):
         row_idx = table.cursor_row
         if self._incident_ids:
             inc_id = self._incident_ids[row_idx]
-            if inc_id in self._incidents_cache:
-                return [self._incidents_cache[inc_id]]
+            return [self._incidents_cache[inc_id]]
         return []
 
     def action_ack_selected(self) -> None:
         incs = self._get_target_incs()
         if incs:
-            self.app.push_screen(
-                ConfirmDialog(f"Acknowledge {len(incs)} incident(s)?"),
-                lambda confirmed: self._do_ack(incs) if confirmed else None,
-            )
+            self._do_ack(incs)
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:
@@ -433,11 +429,11 @@ class IncidentsScreen(Screen):
         try:
             app.pd.incidents.ack(incs)
             logger.debug("Acked %d incidents", len(incs))
+            app.call_from_thread(app.notify, f"Acknowledged {len(incs)} incident(s)")
+            app.call_from_thread(self._populate_table, list(self._incidents_cache.values()))
         except Exception as e:
             logger.exception("Error acking incidents")
             app.call_from_thread(self._set_error, str(e))
-            return
-        app.call_from_thread(self.load_incidents)
 
     @work(thread=True)
     def _do_auto_ack(self, incs: list[dict]) -> None:
@@ -467,10 +463,7 @@ class IncidentsScreen(Screen):
     def action_resolve_selected(self) -> None:
         incs = self._get_target_incs()
         if incs:
-            self.app.push_screen(
-                ConfirmDialog(f"Resolve {len(incs)} incident(s)?"),
-                lambda confirmed: self._do_resolve(incs) if confirmed else None,
-            )
+            self._do_resolve(incs)
 
     @work(thread=True)
     def _do_resolve(self, incs: list[dict]) -> None:

@@ -46,12 +46,3 @@ tasks:
       - uv.lock
     method: checksum
 
-  dependency-install-ci:
-    cmds:
-      - uv sync
-    sources:
-      - uv.lock
-      - pyproject.toml
-    generates:
-      - uv.lock
-    method: checksum
