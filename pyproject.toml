@@ -44,7 +44,7 @@ asyncio_mode = "auto"
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-major_on_zero = false
+allow_zero_version = true
 build_command = """
     python -m pip install -e '.[build]'
     uv lock --upgrade-package "$PACKAGE_NAME"
@@ -53,9 +53,6 @@ build_command = """
 """
 tag_format = "v{version}"
 upload_to_pypi = false
-
-[tool.semantic_release.changelog]
-enabled = false
 
 [tool.ruff]
 line-length = 100
