@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-build = ["uv>=0.10.12"]
+build = ["uv>=0.8.17"]
 
 [project.scripts]
 pdh-ng = "pdh_ng.main:main"
@@ -53,6 +53,9 @@ build_command = """
 """
 tag_format = "v{version}"
 upload_to_pypi = false
+
+[tool.uv]
+required-version = ">=0.8.17"
 
 [tool.ruff]
 line-length = 100
