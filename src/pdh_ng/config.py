@@ -15,7 +15,7 @@ DEFAULTS = {
     "log_file": (
         "~/Library/Logs/pdh-ng/tui.log" if _ON_MACOS else "~/.local/state/pdh-ng/logs/tui.log"
     ),
-    "log_level": "DEBUG",
+    "log_level": "INFO",
     "max_network_attempts": 5,
 }
 

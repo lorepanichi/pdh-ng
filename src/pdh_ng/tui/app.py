@@ -12,7 +12,7 @@ from ..pd import PagerDuty
 from .constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from .screens import IncidentsScreen
 
-logger = logging.getLogger("pdh-ng.tui")
+logger = logging.getLogger("pdh-ng")
 
 if platform.system() == "Darwin":
     _PREFS_PATH = Path("~/Library/Application Support/pdh-ng/ui.yaml")
