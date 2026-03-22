@@ -42,6 +42,7 @@ uv run pytest tests/ -q
 
 ## CLI (`main.py`)
 
+- `-V` / `--version` — print version and exit
 - `-c FILE` / `--config FILE` — use an alternative config file (overrides `PDH_NG_CONFIG` env var)
 - If `-c FILE` is given and the file does not exist, print error and exit (default path missing is silently ignored)
 - `-d` / `--debug` — force `cfg["log_level"] = "DEBUG"` after config is loaded, overriding the file/env value
@@ -152,4 +153,4 @@ Currently running **Textual 8.x** (requires `rich>=14.2.0`). Key API notes:
 
 ## Dependencies
 
-Managed with **uv**. Key runtime deps: `pagerduty`, `textual>=8.1.1`, `rich>=14.2.0`, `pyyaml`, `humanize`. Build backend: `hatchling`.
+Managed with **uv**. Key runtime deps: `pagerduty>=4.0.1,<7.0.0` (6.x uses httpx instead of requests — `response.ok` removed, use `response.is_success`), `textual>=8.1.1`, `rich>=14.2.0`, `pyyaml`, `humanize`. Build backend: `hatchling`.
