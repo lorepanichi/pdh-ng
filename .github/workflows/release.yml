@@ -2,6 +2,11 @@ name: Release
 on:
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
@@ -25,6 +30,8 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - run: source .venv/bin/activate && task test
 
@@ -42,6 +49,8 @@ jobs:
           python-version: '3.12'
       - run: pip install uv
       - uses: arduino/setup-task@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - uses: python-semantic-release/python-semantic-release@v10
         with:
