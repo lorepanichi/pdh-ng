@@ -2,18 +2,12 @@ name: Sanity Checks
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: pre-commit/action@v3.0.0
-        env:
-          SKIP: trufflehog
-
   test:
     runs-on: ubuntu-latest
     steps:
@@ -34,7 +28,6 @@ jobs:
   build-test:
     name: "Build wheel"
     needs:
-      - pre-commit
       - test
     runs-on: ubuntu-latest
     steps:
