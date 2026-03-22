@@ -19,7 +19,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv lock --check
-      - uses: arduino/setup-task@v1
+      - uses: arduino/setup-task@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
@@ -38,7 +38,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - uses: arduino/setup-task@v1
+      - uses: arduino/setup-task@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install

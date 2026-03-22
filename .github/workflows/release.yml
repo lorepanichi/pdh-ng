@@ -29,7 +29,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - uses: arduino/setup-task@v1
+      - uses: arduino/setup-task@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install uv
-      - uses: arduino/setup-task@v1
+      - uses: arduino/setup-task@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
