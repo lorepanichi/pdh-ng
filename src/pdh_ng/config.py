@@ -1,4 +1,5 @@
 import os
+import platform
 import sys
 from typing import Any
 
@@ -7,9 +8,13 @@ from rich import print
 
 REQUIRED_KEYS = ["apikey", "uid", "email"]
 
+_ON_MACOS = platform.system() == "Darwin"
+
 DEFAULTS = {
     "log_enabled": True,
-    "log_file": "~/.local/state/pdh-ng/logs/tui.log",
+    "log_file": (
+        "~/Library/Logs/pdh-ng/tui.log" if _ON_MACOS else "~/.local/state/pdh-ng/logs/tui.log"
+    ),
     "log_level": "DEBUG",
     "max_network_attempts": 5,
 }
