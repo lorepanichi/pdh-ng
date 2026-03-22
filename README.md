@@ -65,6 +65,7 @@ pdh-ng [-c FILE] [-d]
 
 | Flag | Description |
 |------|-------------|
+| `-V`, `--version` | Print version and exit. |
 | `-c FILE`, `--config FILE` | Use FILE as config. Exits with error if FILE does not exist. Overrides `PDH_NG_CONFIG`. |
 | `-d`, `--debug` | Force log level to DEBUG, overriding the config value. |
 
