@@ -24,7 +24,7 @@ from .constants import (
 )
 from .widgets import ColumnSelectorScreen, SnoozeDialog, StatusBar
 
-logger = logging.getLogger("pdh-ng.tui")
+logger = logging.getLogger("pdh-ng")
 
 _STATUS_COLORS = {
     "triggered": "red",
