@@ -24,6 +24,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      - run: uv lock --check
       - uses: arduino/setup-task@v1
       - run: task dependency-install
       - run: source .venv/bin/activate && task test
