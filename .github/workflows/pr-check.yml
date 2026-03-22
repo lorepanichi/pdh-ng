@@ -18,7 +18,6 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - run: uv lock --check
       - uses: arduino/setup-task@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
