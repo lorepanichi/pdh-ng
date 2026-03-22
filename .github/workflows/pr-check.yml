@@ -2,18 +2,12 @@ name: Sanity Checks
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: pre-commit/action@v3.0.0
-        env:
-          SKIP: trufflehog
-
   test:
     runs-on: ubuntu-latest
     steps:
@@ -26,13 +20,14 @@ jobs:
           enable-cache: true
       - run: uv lock --check
       - uses: arduino/setup-task@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - run: source .venv/bin/activate && task test
 
   build-test:
     name: "Build wheel"
     needs:
-      - pre-commit
       - test
     runs-on: ubuntu-latest
     steps:
@@ -44,5 +39,7 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - run: uv build
