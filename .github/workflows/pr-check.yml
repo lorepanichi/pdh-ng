@@ -19,8 +19,8 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - run: source .venv/bin/activate && task test
 
@@ -38,7 +38,7 @@ jobs:
         with:
           enable-cache: true
       - uses: arduino/setup-task@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - run: uv build
