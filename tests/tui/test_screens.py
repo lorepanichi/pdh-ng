@@ -17,6 +17,8 @@ from pdh_ng.tui.widgets import SnoozeDialog, StatusBar
 
 
 class TestFmtAge:
+    """Tests for the _fmt_age helper function."""
+
     def test_valid_utc_iso_string(self):
         dt = datetime.now(UTC) - timedelta(minutes=5)
         result = _fmt_age(dt.isoformat().replace("+00:00", "Z"))
@@ -37,6 +39,8 @@ class TestFmtAge:
 
 
 class TestColored:
+    """Tests for the _colored markup helper."""
+
     def test_wraps_in_markup(self):
         result = _colored("hello", "red")
         assert result == "[red]hello[/red]"
@@ -47,6 +51,8 @@ class TestColored:
 
 
 class TestUrgencyMarker:
+    """Tests for IncidentsScreen._urgency_marker static method."""
+
     def test_high_urgency(self):
         result = IncidentsScreen._urgency_marker({"urgency": "high"})
         assert "red" in result
@@ -67,6 +73,8 @@ class TestUrgencyMarker:
 
 
 class TestApplyTitleFilter:
+    """Tests for the _apply_title_filter helper (positive, negative, and edge cases)."""
+
     _incs = [
         {"title": "CPU spike on web-01"},
         {"title": "Memory leak in worker"},
@@ -108,6 +116,8 @@ class TestApplyTitleFilter:
 
 
 class TestCellValue:
+    """Tests for _cell_value column rendering for each column type."""
+
     def test_id(self):
         assert _cell_value({"id": "I123"}, "id") == "I123"
 
@@ -228,6 +238,8 @@ class _IncidentsApp(App):
 
 
 class TestIncidentsScreenAutoRefresh:
+    """Tests for the one-shot auto-refresh timer logic."""
+
     async def test_schedule_next_refresh_sets_timer(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -303,6 +315,8 @@ class TestIncidentsScreenAutoRefresh:
 
 
 class TestIncidentsScreenStatePrefs:
+    """Tests for screen state persistence via app prefs."""
+
     async def test_scope_loaded_from_prefs(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp(prefs={"inc_scope": int(IncScope.TEAM)}).run_test() as pilot:
@@ -364,6 +378,8 @@ class TestIncidentsScreenStatePrefs:
 
 
 class TestIncidentsScreenFilter:
+    """Tests for the title filter input interaction."""
+
     async def test_enter_sets_filter_and_hides_input(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -474,6 +490,8 @@ _SAMPLE_INC = {
 
 
 class TestIncidentsScreenInspect:
+    """Tests for the inspect action (pushing IncidentDetailScreen)."""
+
     async def test_pushes_detail_screen_for_cursor_row(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -510,6 +528,8 @@ class TestIncidentsScreenInspect:
 
 
 class TestIncidentsScreenToggleSelect:
+    """Tests for row selection toggle and bulk-clear via escape."""
+
     async def test_selects_incident_at_cursor(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -558,6 +578,8 @@ class TestIncidentsScreenToggleSelect:
 
 
 class TestIncidentsScreenBulkActions:
+    """Tests for ack, resolve, and snooze bulk actions."""
+
     async def test_ack_calls_do_ack_for_cursor_incident(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:
@@ -651,6 +673,8 @@ class TestIncidentsScreenBulkActions:
 
 
 class TestRowMarker:
+    """Tests for _row_marker combined indicator column rendering."""
+
     def _screen_with(self, selected_ids=None, auto_acked_ids=None) -> IncidentsScreen:
         screen = IncidentsScreen.__new__(IncidentsScreen)
         screen._selected_ids = set(selected_ids or [])
@@ -751,6 +775,8 @@ class TestAutoAckFilter:
 
 
 class TestAutoAckStatePrefs:
+    """Tests for auto-ack flag persistence and table rendering."""
+
     async def test_auto_ack_default_is_false(self):
         with patch.object(IncidentsScreen, "load_incidents"):
             async with _IncidentsApp().run_test() as pilot:

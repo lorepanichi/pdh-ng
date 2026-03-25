@@ -29,6 +29,8 @@ def app(cfg, tmp_path):
 
 
 class TestVisibleColumns:
+    """Tests for the visible_columns property and its filtering logic."""
+
     def test_defaults_when_no_prefs_file(self, app):
         assert app.visible_columns == list(ALL_COLUMNS)
 
@@ -55,6 +57,8 @@ class TestVisibleColumns:
 
 
 class TestPrefsIO:
+    """Tests for prefs file load/save round-trips."""
+
     def test_load_prefs_missing_file(self, app):
         result = app._load_prefs()
         assert result == {}
@@ -85,6 +89,8 @@ class TestPrefsIO:
 
 
 class TestIncScopePrefs:
+    """Tests for the inc_scope preference property."""
+
     def test_defaults_to_mine(self, app):
         assert app.inc_scope == IncScope.MINE
 
@@ -101,6 +107,8 @@ class TestIncScopePrefs:
 
 
 class TestIncStatusPrefs:
+    """Tests for the inc_status preference property."""
+
     def test_defaults_to_all(self, app):
         assert app.inc_status == IncStatus.ALL
 
@@ -117,6 +125,8 @@ class TestIncStatusPrefs:
 
 
 class TestRefreshTimePrefs:
+    """Tests for the refresh_time preference property."""
+
     def test_defaults_to_s5(self, app):
         assert app.refresh_time == RefreshTime.S5
 
@@ -133,6 +143,8 @@ class TestRefreshTimePrefs:
 
 
 class TestTuiAppInit:
+    """Tests for TuiApp construction and class-level attributes."""
+
     def test_cfg_stored(self, cfg):
         with patch("pdh_ng.tui.app.PagerDuty", return_value=MagicMock()):
             app = TuiApp(cfg=cfg)

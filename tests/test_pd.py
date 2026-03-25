@@ -39,6 +39,8 @@ def mock_session():
 
 
 class TestIncidents:
+    """Tests for the Incidents resource class."""
+
     @pytest.fixture
     def incidents(self, cfg, mock_session):
         return Incidents(cfg, mock_session)
@@ -136,6 +138,8 @@ class TestIncidents:
 
 
 class TestUsers:
+    """Tests for the Users resource class."""
+
     @pytest.fixture
     def users(self, cfg, mock_session):
         u = Users(cfg, mock_session)
@@ -195,6 +199,8 @@ class TestUsers:
 
 
 class TestServices:
+    """Tests for the Services resource class."""
+
     @pytest.fixture
     def services(self, cfg, mock_session):
         return Services(cfg, mock_session)
@@ -237,6 +243,8 @@ class TestServices:
 
 
 class TestTeams:
+    """Tests for the Teams resource class."""
+
     @pytest.fixture
     def teams(self, cfg, mock_session):
         t = Teams(cfg, mock_session)
@@ -278,6 +286,8 @@ class TestTeams:
 
 
 class TestPagerDuty:
+    """Tests for PagerDuty client initialisation and auth."""
+
     def test_init_success(self, cfg, mock_session):
         mock_session.rget.return_value = {"abilities": []}
         with patch("pdh_ng.pd.RestApiV2Client", return_value=mock_session):
