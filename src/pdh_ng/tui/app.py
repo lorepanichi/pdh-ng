@@ -39,11 +39,14 @@ class TuiApp(App):
             return
         log_file = Path(self.cfg["log_file"]).expanduser()
         log_file.parent.mkdir(parents=True, exist_ok=True)
+        log_level = getattr(logging, self.cfg["log_level"].upper())
         logging.basicConfig(
             filename=str(log_file),
-            level=getattr(logging, self.cfg["log_level"].upper()),
+            level=log_level,
             format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
+        if log_level > logging.DEBUG:
+            logging.getLogger("httpx").setLevel(logging.WARNING)
 
     def _load_prefs(self) -> dict:
         try:
