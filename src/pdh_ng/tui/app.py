@@ -21,11 +21,18 @@ else:
 
 
 class TuiApp(App):
+    """Textual application root — holds config, the shared PagerDuty client, and UI preferences."""
+
     TITLE = "PDH New Generation"
     CSS_PATH = "styles.tcss"
     BINDINGS = [("q", "quit", "Quit")]
 
     def __init__(self, cfg: Config) -> None:
+        """Initialise the app, create the shared PagerDuty client, and load prefs.
+
+        Args:
+            cfg: Loaded and validated application config.
+        """
         super().__init__()
         self.cfg = cfg
         self.pd = PagerDuty(cfg)
@@ -34,6 +41,7 @@ class TuiApp(App):
         self._setup_logging()
 
     def _setup_logging(self) -> None:
+        """Configure file-based logging from config, or add a NullHandler if disabled."""
         if not self.cfg["log_enabled"]:
             logging.getLogger("pdh-ng").addHandler(logging.NullHandler())
             return
@@ -49,6 +57,11 @@ class TuiApp(App):
             logging.getLogger("httpx").setLevel(logging.WARNING)
 
     def _load_prefs(self) -> dict:
+        """Load UI preferences from the YAML prefs file.
+
+        Returns:
+            Parsed prefs dict, or an empty dict if the file is missing or unreadable.
+        """
         try:
             if self._prefs_path.exists():
                 with open(self._prefs_path) as f:
@@ -58,6 +71,7 @@ class TuiApp(App):
         return {}
 
     def save_prefs(self) -> None:
+        """Persist the in-memory prefs dict to the YAML prefs file."""
         try:
             self._prefs_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self._prefs_path, "w") as f:
@@ -67,6 +81,7 @@ class TuiApp(App):
 
     @property
     def visible_columns(self) -> list[str]:
+        """Visible column list, filtered to known columns. Defaults to all columns."""
         cols = self._prefs.get("visible_columns", list(ALL_COLUMNS))
         return [c for c in cols if c in ALL_COLUMNS]
 
@@ -76,6 +91,7 @@ class TuiApp(App):
 
     @property
     def refresh_time(self) -> RefreshTime:
+        """Auto-refresh interval, defaulting to 5s."""
         return RefreshTime(self._prefs.get("refresh_time", RefreshTime.S5))
 
     @refresh_time.setter
@@ -84,6 +100,7 @@ class TuiApp(App):
 
     @property
     def inc_scope(self) -> IncScope:
+        """Incident scope filter, defaulting to mine."""
         return IncScope(self._prefs.get("inc_scope", IncScope.MINE))
 
     @inc_scope.setter
@@ -92,6 +109,7 @@ class TuiApp(App):
 
     @property
     def inc_status(self) -> IncStatus:
+        """Incident status filter, defaulting to all."""
         return IncStatus(self._prefs.get("inc_status", IncStatus.ALL))
 
     @inc_status.setter
@@ -100,6 +118,7 @@ class TuiApp(App):
 
     @property
     def inc_urgency(self) -> IncUrgency:
+        """Incident urgency filter, defaulting to all."""
         return IncUrgency(self._prefs.get("inc_urgency", IncUrgency.ALL))
 
     @inc_urgency.setter
@@ -108,6 +127,7 @@ class TuiApp(App):
 
     @property
     def auto_ack(self) -> bool:
+        """Whether auto-ack is enabled, defaulting to False."""
         return self._prefs.get("auto_ack", False)
 
     @auto_ack.setter
@@ -115,6 +135,7 @@ class TuiApp(App):
         self._prefs["auto_ack"] = value
 
     def on_mount(self) -> None:
+        """Push the incidents screen with all persisted UI preferences."""
         self.push_screen(
             IncidentsScreen(
                 inc_scope=self.inc_scope,

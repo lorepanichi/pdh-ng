@@ -39,6 +39,15 @@ _URGENCY_COLORS = {
 
 
 def _fmt_age(created_at: str) -> str:
+    """Convert an ISO 8601 timestamp to a human-readable relative age string.
+
+    Args:
+        created_at: ISO 8601 datetime string (e.g. "2024-01-01T00:00:00Z").
+
+    Returns:
+        Human-readable relative time (e.g. "3 hours ago"), or the original
+        string if parsing fails.
+    """
     try:
         dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         return humanize.naturaltime(dt, when=datetime.now(UTC))
@@ -47,10 +56,21 @@ def _fmt_age(created_at: str) -> str:
 
 
 def _colored(text: str, color: str) -> str:
+    """Wrap text in Rich color markup tags."""
     return f"[{color}]{text}[/{color}]"
 
 
 def _apply_title_filter(incs: list[dict], title_filter: str) -> list[dict]:
+    """Filter incidents by title substring.
+
+    Args:
+        incs: List of incident dicts.
+        title_filter: Search term. Prefix with ``!`` to exclude matches.
+            Empty string returns all incidents unchanged.
+
+    Returns:
+        Filtered list of incident dicts.
+    """
     if not title_filter:
         return incs
     if title_filter.startswith("!"):
@@ -60,6 +80,15 @@ def _apply_title_filter(incs: list[dict], title_filter: str) -> list[dict]:
 
 
 def _cell_value(inc: dict, col: str) -> str:
+    """Return the formatted cell value for a given incident column.
+
+    Args:
+        inc: Incident dict from the PagerDuty API.
+        col: Column name (e.g. "title", "status", "age").
+
+    Returns:
+        Rich-markup string ready for DataTable insertion.
+    """
     match col:
         case "id":
             return inc.get("id", "")
@@ -112,6 +141,16 @@ class IncidentsScreen(Screen):
         auto_ack: bool = False,
         visible_columns: list[str] | None = None,
     ) -> None:
+        """Initialise the incidents screen from persisted UI preferences.
+
+        Args:
+            inc_scope: Scope filter (mine / team / all).
+            inc_status: Status filter (all / triggered / acknowledged).
+            inc_urgency: Urgency filter (all / high / low).
+            refresh_time: Auto-refresh interval.
+            auto_ack: Whether auto-ack is enabled on load.
+            visible_columns: Ordered list of column names to display.
+        """
         super().__init__()
         self._inc_scope: IncScope = inc_scope
         self._inc_status: IncStatus = inc_status
@@ -130,6 +169,7 @@ class IncidentsScreen(Screen):
         self._auto_acked_ids: set[str] = set()
 
     def compose(self) -> ComposeResult:
+        """Build the incidents screen layout."""
         yield Header()
         yield DataTable(
             id="incidents-table",
@@ -153,25 +193,33 @@ class IncidentsScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        """Trigger the initial incident load, while visibles columns are shown."""
         self._rebuild_columns()
         self.load_incidents()
 
     def on_unmount(self) -> None:
+        """Persist UI preferences when the screen is removed."""
         self.app.save_prefs()
 
     def on_screen_suspend(self) -> None:
+        """Pause auto-refresh while a child screen (e.g. detail) is open."""
         self._suspended = True
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
             self._refresh_timer = None
 
     def on_screen_resume(self) -> None:
+        """Resume auto-refresh when returning from a child screen."""
         self._suspended = False
         self._schedule_next_refresh()
 
     # -- auto-refresh --
 
     def _schedule_next_refresh(self) -> None:
+        """Cancel any pending refresh timer and arm a new one-shot timer.
+
+        Does nothing if auto-refresh is disabled or the screen is suspended.
+        """
         if self._refresh_timer is not None:
             self._refresh_timer.stop()
             self._refresh_timer = None
@@ -179,6 +227,7 @@ class IncidentsScreen(Screen):
             self._refresh_timer = self.set_timer(self._refresh_time, self._on_refresh_timer)
 
     def _on_refresh_timer(self) -> None:
+        """Callback fired when the one-shot refresh timer expires."""
         self._refresh_timer = None
         self.load_incidents()
 
@@ -186,6 +235,14 @@ class IncidentsScreen(Screen):
 
     @staticmethod
     def _urgency_marker(inc: dict) -> str:
+        """Return a colored block character representing incident urgency.
+
+        Args:
+            inc: Incident dict.
+
+        Returns:
+            Rich-markup string: red ``▋`` (high), blue ``▋`` (low), or a space.
+        """
         urgency = inc.get("urgency", "")
         if urgency == "high":
             return "[bold red]▋[/bold red]"
@@ -194,12 +251,21 @@ class IncidentsScreen(Screen):
         return " "
 
     def _row_marker(self, inc: dict) -> str:
+        """Build the combined three-character marker for the indicator column.
+
+        Args:
+            inc: Incident dict.
+
+        Returns:
+            Three-character Rich-markup string: urgency + auto-ack + selection.
+        """
         inc_id = inc["id"]
         ack = "[bold yellow]![/bold yellow]" if inc_id in self._auto_acked_ids else " "
         sel = "[bold green]✓[/bold green]" if inc_id in self._selected_ids else " "
         return self._urgency_marker(inc) + ack + sel
 
     def _rebuild_columns(self) -> None:
+        """Clear and re-add DataTable columns to reset stale column widths."""
         table = self.query_one("#incidents-table", DataTable)
         table.clear(columns=True)
         table.add_column("", width=3)
@@ -207,6 +273,12 @@ class IncidentsScreen(Screen):
 
     @work(exclusive=True, thread=True)
     def load_incidents(self) -> None:
+        """Fetch incidents from the PagerDuty API and populate the table.
+
+        Runs in a background thread. Applies the current scope, status,
+        urgency, and title filters. On success calls ``_populate_table``;
+        on error calls ``_set_error``.
+        """
         app = self.app
         app.call_from_thread(self._set_loading)
         statuses = self._current_statuses
@@ -234,23 +306,36 @@ class IncidentsScreen(Screen):
             app.call_from_thread(self._set_error, str(e))
 
     def _set_loading(self) -> None:
+        """Tell the status bar that a fetch is in progress."""
         self.query_one("#status-bar", StatusBar).set_loading()
 
     def _set_error(self, message: str) -> None:
+        """Display an error message in the status bar and reschedule refresh.
+
+        Args:
+            message: Error description to show.
+        """
         self.query_one("#status-bar", StatusBar).set_error(message)
         self._schedule_next_refresh()
 
     def _populate_table(self, incs: list) -> None:
+        """Populate the DataTable from a list of incidents.
+
+        Preserves the cursor position by incident ID across reloads.
+        Reconciles ``_selected_ids`` and ``_auto_acked_ids`` against the
+        new dataset, then schedules the next refresh.
+
+        Args:
+            incs: List of incident dicts to display.
+        """
         table = self.query_one("#incidents-table", DataTable)
 
         # capture the incident that the row cursor is pointing to
         cursor_row = table.cursor_row
         cursor_id = self._incident_ids[cursor_row] if self._incident_ids else None
 
-        # clear table columns to reset widths
-        table.clear(columns=True)
-        table.add_column("", width=3)
-        table.add_columns(*self._visible_columns)
+        # rebuild columns to reset widths
+        self._rebuild_columns()
         self._incident_ids = []
         self._incidents_cache = {}
 
@@ -286,34 +371,40 @@ class IncidentsScreen(Screen):
 
     @on(StatusBar.ScopeChanged)
     def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
+        """Handle scope filter changes from the status bar."""
         self._inc_scope = event.inc_scope
         self.app.inc_scope = event.inc_scope
 
     @on(StatusBar.StatusChanged)
     def _on_status_changed(self, event: StatusBar.StatusChanged) -> None:
+        """Handle status filter changes from the status bar."""
         self._inc_status = event.inc_status
         self._current_statuses = _INC_STATUS_API[event.inc_status]
         self.app.inc_status = event.inc_status
 
     @on(StatusBar.UrgencyChanged)
     def _on_urgency_changed(self, event: StatusBar.UrgencyChanged) -> None:
+        """Handle urgency filter changes from the status bar."""
         self._inc_urgency = event.inc_urgency
         self._current_urgencies = _INC_URGENCY_API[event.inc_urgency]
         self.app.inc_urgency = event.inc_urgency
 
     @on(StatusBar.RefreshTimeChanged)
     def _on_refresh_time_changed(self, event: StatusBar.RefreshTimeChanged) -> None:
+        """Handle refresh-interval changes and reschedule the refresh timer."""
         self._refresh_time = event.refresh_time
         self.app.refresh_time = event.refresh_time
         self._schedule_next_refresh()
 
     @on(StatusBar.AutoAckChanged)
     def _on_auto_ack_changed(self, event: StatusBar.AutoAckChanged) -> None:
+        """Handle auto-ack toggle changes from the status bar."""
         self._auto_ack = event.auto_ack
         self.app.auto_ack = event.auto_ack
 
     @on(Input.Submitted, "#title-filter")
     def _on_title_filter_submitted(self, event: Input.Submitted) -> None:
+        """Apply the submitted title filter and reload incidents."""
         self._title_filter = event.value
         self.query_one("#title-filter", Input).display = False
         self.query_one("#incidents-table").focus()
@@ -322,21 +413,27 @@ class IncidentsScreen(Screen):
     # -- actions: filter controls --
 
     def action_cycle_scope(self) -> None:
+        """Cycle the scope filter: mine → team → all."""
         self.query_one("#status-bar", StatusBar).cycle_scope()
 
     def action_cycle_status(self) -> None:
+        """Cycle the status filter: all → triggered → acknowledged."""
         self.query_one("#status-bar", StatusBar).cycle_status()
 
     def action_cycle_urgency(self) -> None:
+        """Cycle the urgency filter: all → high → low."""
         self.query_one("#status-bar", StatusBar).cycle_urgency()
 
     def action_cycle_auto_ack(self) -> None:
+        """Toggle auto-ack on/off."""
         self.query_one("#status-bar", StatusBar).toggle_auto_ack()
 
     def action_cycle_refresh(self) -> None:
+        """Cycle the auto-refresh interval: off → 3s → 5s → 10s."""
         self.query_one("#status-bar", StatusBar).cycle_refresh()
 
     def action_toggle_filter(self) -> None:
+        """Show or hide the title filter input."""
         filter_input = self.query_one("#title-filter", Input)
         filter_input.display = not filter_input.display
         if filter_input.display:
@@ -346,6 +443,7 @@ class IncidentsScreen(Screen):
             self.query_one("#incidents-table").focus()
 
     def action_clear_or_hide_filter(self) -> None:
+        """Hide the title filter if visible; otherwise clear row selection."""
         # this action is multipurpose:
         # - if the title filter is visibile, reset
         # - otherwise is an incident de-selection
@@ -362,6 +460,7 @@ class IncidentsScreen(Screen):
                 table.update_cell_at(Coordinate(i, 0), self._row_marker(inc))
 
     def action_toggle_select(self) -> None:
+        """Toggle selection on the row under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
         if self._incident_ids:
@@ -374,20 +473,26 @@ class IncidentsScreen(Screen):
             table.update_cell_at(Coordinate(row_idx, 0), self._row_marker(inc))
 
     def action_select_columns(self) -> None:
+        """Open the column selector modal."""
         self.app.push_screen(
             ColumnSelectorScreen(self._visible_columns),
             self._apply_column_selection,
         )
 
     def _apply_column_selection(self, selected: list[str] | None) -> None:
+        """Apply the column list returned by the column selector modal.
+
+        Args:
+            selected: New ordered column list, or ``None`` if the modal was dismissed.
+        """
         if selected is None:
             return
         self._visible_columns = selected
         self.app.visible_columns = selected
-        self._rebuild_columns()
         self._populate_table(list(self._incidents_cache.values()))
 
     def action_inspect(self) -> None:
+        """Open the detail screen for the incident under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
         if self._incident_ids:
@@ -397,6 +502,7 @@ class IncidentsScreen(Screen):
                 self.app.push_screen(IncidentDetailScreen(inc))
 
     def action_open_url(self) -> None:
+        """Open the PagerDuty web URL of the incident under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
         if self._incident_ids:
@@ -409,6 +515,12 @@ class IncidentsScreen(Screen):
     # -- actions: incident mutations --
 
     def _get_target_incs(self) -> list[dict]:
+        """Return the list of incidents to act on.
+
+        Returns:
+            Selected incidents if any are selected, otherwise a single-element
+            list with the incident under the cursor. Empty list if no incidents.
+        """
         if self._selected_ids:
             return [self._incidents_cache[i] for i in self._selected_ids]
         table = self.query_one("#incidents-table", DataTable)
@@ -419,12 +531,21 @@ class IncidentsScreen(Screen):
         return []
 
     def action_ack_selected(self) -> None:
+        """Acknowledge the target incident(s)."""
         incs = self._get_target_incs()
         if incs:
             self._do_ack(incs)
 
     @work(thread=True)
     def _do_ack(self, incs: list[dict]) -> None:
+        """Acknowledge incidents via the PagerDuty API.
+
+        Runs in a background thread. On success repopulates the table from
+        cache without a network round-trip.
+
+        Args:
+            incs: List of incident dicts to acknowledge.
+        """
         app = self.app
         try:
             app.pd.incidents.ack(incs)
@@ -435,8 +556,72 @@ class IncidentsScreen(Screen):
             logger.exception("Error acking incidents")
             app.call_from_thread(self._set_error, str(e))
 
+    def action_resolve_selected(self) -> None:
+        """Resolve the target incident(s)."""
+        incs = self._get_target_incs()
+        if incs:
+            self._do_resolve(incs)
+
+    @work(thread=True)
+    def _do_resolve(self, incs: list[dict]) -> None:
+        """Resolve incidents via the PagerDuty API.
+
+        Runs in a background thread. On success triggers a full reload.
+
+        Args:
+            incs: List of incident dicts to resolve.
+        """
+        app = self.app
+        try:
+            app.pd.incidents.resolve(incs)
+            logger.debug("Resolved %d incidents", len(incs))
+        except Exception as e:
+            logger.exception("Error resolving incidents")
+            app.call_from_thread(self._set_error, str(e))
+            return
+        app.call_from_thread(self.load_incidents)
+
+    def action_snooze_selected(self) -> None:
+        """Open the snooze dialog for the target incident(s)."""
+        incs = self._get_target_incs()
+        if incs:
+            self.app.push_screen(
+                SnoozeDialog(),
+                lambda duration: self._do_snooze(incs, duration) if duration else None,
+            )
+
+    @work(thread=True)
+    def _do_snooze(self, incs: list[dict], duration: int) -> None:
+        """Snooze incidents via the PagerDuty API.
+
+        Runs in a background thread. On success triggers a full reload.
+
+        Args:
+            incs: List of incident dicts to snooze.
+            duration: Snooze duration in seconds.
+        """
+        app = self.app
+        try:
+            app.pd.incidents.snooze(incs, duration)
+            logger.debug("Snoozed %d incidents for %ds", len(incs), duration)
+        except Exception as e:
+            logger.exception("Error snoozing incidents")
+            app.call_from_thread(self._set_error, str(e))
+            return
+        app.call_from_thread(self.load_incidents)
+
     @work(thread=True)
     def _do_auto_ack(self, incs: list[dict]) -> None:
+        """Automatically acknowledge triggered incidents assigned to the current user.
+
+        Runs in a background thread. Filters ``incs`` to triggered incidents
+        where the configured ``uid`` appears in the assignees list, regardless
+        of the active scope. Updates ``_auto_acked_ids`` and repopulates the
+        table without a network round-trip.
+
+        Args:
+            incs: Full incident list from the most recent fetch.
+        """
         app = self.app
         uid = app.cfg["uid"]
         to_ack = [
@@ -460,64 +645,39 @@ class IncidentsScreen(Screen):
         )
         app.call_from_thread(self._populate_table, incs)
 
-    def action_resolve_selected(self) -> None:
-        incs = self._get_target_incs()
-        if incs:
-            self._do_resolve(incs)
-
-    @work(thread=True)
-    def _do_resolve(self, incs: list[dict]) -> None:
-        app = self.app
-        try:
-            app.pd.incidents.resolve(incs)
-            logger.debug("Resolved %d incidents", len(incs))
-        except Exception as e:
-            logger.exception("Error resolving incidents")
-            app.call_from_thread(self._set_error, str(e))
-            return
-        app.call_from_thread(self.load_incidents)
-
-    def action_snooze_selected(self) -> None:
-        incs = self._get_target_incs()
-        if incs:
-            self.app.push_screen(
-                SnoozeDialog(),
-                lambda duration: self._do_snooze(incs, duration) if duration else None,
-            )
-
-    @work(thread=True)
-    def _do_snooze(self, incs: list[dict], duration: int) -> None:
-        app = self.app
-        try:
-            app.pd.incidents.snooze(incs, duration)
-            logger.debug("Snoozed %d incidents for %ds", len(incs), duration)
-        except Exception as e:
-            logger.exception("Error snoozing incidents")
-            app.call_from_thread(self._set_error, str(e))
-            return
-        app.call_from_thread(self.load_incidents)
-
 
 class IncidentDetailScreen(Screen):
     BINDINGS = [("escape", "app.pop_screen", "Back")]
 
     def __init__(self, inc: dict) -> None:
+        """Initialise the detail screen for a single incident.
+
+        Args:
+            inc: Incident dict from the PagerDuty API.
+        """
         super().__init__()
         self._inc = inc
 
     def compose(self) -> ComposeResult:
+        """Build the incident detail layout."""
         yield Header()
         yield Static(id="incident-info")
         yield DataTable(id="alerts-table", zebra_stripes=True)
         yield Footer()
 
     def on_mount(self) -> None:
+        """Set up the alerts table columns, render incident info, and load alerts."""
         table = self.query_one("#alerts-table", DataTable)
         table.add_columns("ID", "Summary", "Status", "Age")
         self._populate_info(self._inc)
         self.load_alerts()
 
     def _populate_info(self, inc: dict) -> None:
+        """Render incident metadata into the info Static widget.
+
+        Args:
+            inc: Incident dict to display.
+        """
         status = inc.get("status", "")
         urgency = inc.get("urgency", "")
         assignees = ", ".join(a["assignee"]["summary"] for a in inc.get("assignments", []))
@@ -539,6 +699,7 @@ class IncidentDetailScreen(Screen):
 
     @work(exclusive=True, thread=True)
     def load_alerts(self) -> None:
+        """Fetch and display alerts for the current incident."""
         app = self.app
         try:
             alerts_data = app.pd.incidents.alerts(self._inc["id"])
@@ -548,6 +709,11 @@ class IncidentDetailScreen(Screen):
             logger.exception("Error loading alerts")
 
     def _populate_alerts(self, alerts: list) -> None:
+        """Populate the alerts DataTable.
+
+        Args:
+            alerts: List of alert dicts from the PagerDuty API.
+        """
         table = self.query_one("#alerts-table", DataTable)
         for alert in alerts:
             table.add_row(

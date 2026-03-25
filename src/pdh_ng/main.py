@@ -17,6 +17,7 @@ _DEFAULT_CONFIG = (
 
 
 def main():
+    """Parse CLI arguments, validate config, and run the TUI application."""
     parser = argparse.ArgumentParser(
         prog="pdh-ng",
         description="PDH New Generation.",

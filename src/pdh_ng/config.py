@@ -21,10 +21,22 @@ DEFAULTS = {
 
 
 class Config:
+    """Thin dict wrapper that holds application configuration key/value pairs."""
+
     def __init__(self) -> None:
         self.cfg: dict = {}
 
     def from_yaml(self, path: str) -> None:
+        """Load and merge a YAML config file into the internal dict.
+
+        Args:
+            path: Path to the YAML file (``~`` is expanded).
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+            yaml.YAMLError: If the file is not valid YAML.
+            ValueError: If the YAML root is not a mapping.
+        """
         with open(os.path.expanduser(path)) as f:
             o = yaml.safe_load(f.read())
         self.cfg.update(o)
@@ -39,6 +51,7 @@ class Config:
         return repr(self.cfg)
 
     def get(self, key: str, default=None):
+        """Return the value for ``key``, or ``default`` if the key is absent."""
         return self.cfg.get(key, default)
 
     def __contains__(self, key) -> bool:
@@ -49,10 +62,23 @@ config = Config()
 
 
 def _env_var(key: str) -> str:
+    """Return the environment variable name for a config key"""
     return f"PDH_NG_{key.upper()}"
 
 
 def load_and_validate(fileName: str) -> Config:
+    """Load config from a YAML file with env var fallback, validate required keys, apply defaults.
+
+    File values take precedence over env vars. Missing required keys cause a printed error
+    and ``sys.exit(1)``.
+
+    Args:
+        fileName: Path to the YAML config file. Missing file is silently ignored
+            unless ``-c FILE`` was specified explicitly by the caller.
+
+    Returns:
+        Populated :class:`Config` instance.
+    """
     try:
         config.from_yaml(fileName)
     except FileNotFoundError:

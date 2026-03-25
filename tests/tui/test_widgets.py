@@ -15,6 +15,8 @@ from pdh_ng.tui.widgets import ColumnSelectorScreen, SnoozeDialog, StatusBar
 
 
 class StatusBarApp(App):
+    """Test harness app that hosts a StatusBar and collects emitted messages."""
+
     CSS = ""
 
     def __init__(self, inc_scope=IncScope.MINE):
@@ -60,6 +62,8 @@ class ModalApp(App):
 
 
 class TestStatusBar:
+    """Tests for StatusBar filter cycling, labels, and message emission."""
+
     async def test_initial_scope_mine(self):
         async with StatusBarApp(inc_scope=IncScope.MINE).run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
@@ -256,6 +260,8 @@ class TestStatusBar:
 
 
 class TestStatusBarAutoAck:
+    """Tests for the auto-ack toggle button and AutoAckChanged message."""
+
     async def test_default_auto_ack_is_off(self):
         async with StatusBarApp().run_test() as pilot:
             bar = pilot.app.query_one("#status-bar", StatusBar)
@@ -328,6 +334,8 @@ class TestStatusBarAutoAck:
 
 
 class TestSnoozeDialog:
+    """Tests for SnoozeDialog button dismiss values."""
+
     async def test_1h_dismisses_3600(self):
         async with ModalApp(SnoozeDialog()).run_test() as pilot:
             await pilot.click("#snooze-1h")
@@ -354,6 +362,8 @@ class TestSnoozeDialog:
 
 
 class TestColumnSelectorScreen:
+    """Tests for ColumnSelectorScreen dismiss values and column ordering."""
+
     async def test_escape_dismisses_none(self):
         async with ModalApp(ColumnSelectorScreen(ALL_COLUMNS)).run_test() as pilot:
             await pilot.press("escape")

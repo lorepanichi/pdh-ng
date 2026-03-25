@@ -31,6 +31,8 @@ def partial_yaml(tmp_path):
 
 
 class TestConfig:
+    """Tests for the Config class dict interface."""
+
     def test_from_yaml(self, valid_yaml):
         path, data = valid_yaml
         cfg = Config()
@@ -56,6 +58,8 @@ class TestConfig:
 
 
 class TestLoadAndValidate:
+    """Tests for the load_and_validate function."""
+
     def test_valid_config_file(self, valid_yaml):
         path, data = valid_yaml
         cfg = load_and_validate(str(path))
