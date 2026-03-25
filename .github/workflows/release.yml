@@ -19,22 +19,6 @@ jobs:
         env:
           SKIP: trufflehog
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - uses: arduino/setup-task@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: task dependency-install
-      - run: source .venv/bin/activate && task test
-
   release:
     needs: [pre-commit, test]
     runs-on: ubuntu-latest
@@ -49,8 +33,8 @@ jobs:
           python-version: '3.12'
       - run: pip install uv
       - uses: arduino/setup-task@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task dependency-install
       - uses: python-semantic-release/python-semantic-release@v10
         with:
