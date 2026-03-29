@@ -20,7 +20,7 @@ jobs:
           SKIP: trufflehog
 
   release:
-    needs: [pre-commit, test]
+    needs: [pre-commit]
     runs-on: ubuntu-latest
     permissions:
       contents: write

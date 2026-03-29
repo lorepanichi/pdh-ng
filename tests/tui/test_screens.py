@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from textual.app import App, ComposeResult
-from textual.widgets import Input
+from textual.widgets import DataTable, Input
 
 from pdh_ng.tui.constants import ALL_COLUMNS, IncScope, IncStatus, IncUrgency, RefreshTime
 from pdh_ng.tui.screens import (
@@ -498,6 +498,7 @@ class TestIncidentsScreenInspect:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
                 with patch.object(pilot.app, "push_screen") as mock_push:
                     screen.action_inspect()
                     await pilot.pause()
@@ -536,6 +537,8 @@ class TestIncidentsScreenToggleSelect:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._populate_table([_SAMPLE_INC])
                 await pilot.pause()
+                table = screen.query_one("#incidents-table", DataTable)
+                table.show_cursor = True
 
                 screen.action_toggle_select()
                 await pilot.pause()
@@ -548,6 +551,8 @@ class TestIncidentsScreenToggleSelect:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._populate_table([_SAMPLE_INC])
                 await pilot.pause()
+                table = screen.query_one("#incidents-table", DataTable)
+                table.show_cursor = True
                 screen._selected_ids.add("I1")
 
                 screen.action_toggle_select()
@@ -586,6 +591,7 @@ class TestIncidentsScreenBulkActions:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
                 with patch.object(screen, "_do_ack") as mock_ack:
                     screen.action_ack_selected()
                     await pilot.pause()
@@ -636,6 +642,7 @@ class TestIncidentsScreenBulkActions:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
                 with patch.object(screen, "_do_resolve") as mock_resolve:
                     screen.action_resolve_selected()
                     await pilot.pause()
@@ -656,6 +663,7 @@ class TestIncidentsScreenBulkActions:
                 screen = pilot.app.query_one(IncidentsScreen)
                 screen._incident_ids = ["I1"]
                 screen._incidents_cache = {"I1": _SAMPLE_INC}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
                 with patch.object(pilot.app, "push_screen") as mock_push:
                     screen.action_snooze_selected()
                     await pilot.pause()

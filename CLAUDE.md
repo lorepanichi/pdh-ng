@@ -148,7 +148,7 @@ Currently running **Textual 8.x** (requires `rich>=14.2.0`). Key API notes:
 - `ModalScreen.dismiss(value)` passes value to the `push_screen` callback
 - Bindings use `Binding(key, action, description, show=False)` to hide from footer
 - `set_timer(interval, cb)` fires once after `interval` seconds (one-shot); `set_interval` is repeating
-- `DataTable` (7.5.0+): fires `RowSelected` only when the row is **already highlighted** — clicking an un-highlighted row first highlights it; selection fires on the second click. Handle via `on_data_table_row_selected` method (not `@on` decorator with CSS selector — unreliable in 8.x). `DataTable` consumes `enter` internally so screen-level `enter` bindings are never reached.
+- `DataTable` (7.5.0+): fires `RowSelected` only when the row is **already highlighted** — clicking an un-highlighted row first highlights it; selection fires on the second click. Handle via `on_data_table_row_selected` method (not `@on` decorator with CSS selector — unreliable for widget-emitted messages: Textual's dispatch silently skips `@on`-with-selector handlers when `message._sender` is `None`, which happens when the message is posted from a `@work(thread=True)` worker where the `active_message_pump` context var is not set; the naming-convention handler has no such guard). `@on` with a CSS selector is safe for user-input events like `Click` that are always generated inside the asyncio event loop. `DataTable` consumes `enter` internally so screen-level `enter` bindings are never reached.
 - `Static` with `height: auto` inside `ScrollableContainer` does not size correctly in Textual 8.x — lay out `Static` and `DataTable` directly in the `Screen` instead.
 
 ## Dependencies
