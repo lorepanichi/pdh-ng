@@ -5,7 +5,7 @@ import webbrowser
 from datetime import UTC, datetime
 
 import humanize
-from textual import on, work
+from textual import events, on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.coordinate import Coordinate
@@ -110,6 +110,9 @@ def _cell_value(inc: dict, col: str) -> str:
             return ""
 
 
+_NAV_KEYS = frozenset({"up", "down", "pageup", "pagedown"})
+
+
 class IncidentsScreen(Screen):
     BINDINGS = [
         Binding("1", "cycle_scope", "scope filter", show=False),
@@ -177,6 +180,7 @@ class IncidentsScreen(Screen):
             zebra_stripes=True,
             # this is to make urgency color appear under a cursor highlighted row
             cursor_foreground_priority="renderable",
+            show_cursor=False,
         )
         yield Input(
             placeholder="filter title... (!term to exclude) — enter to apply, esc to cancel",
@@ -321,7 +325,10 @@ class IncidentsScreen(Screen):
     def _populate_table(self, incs: list) -> None:
         """Populate the DataTable from a list of incidents.
 
-        Preserves the cursor position by incident ID across reloads.
+        Preserves cursor position by incident ID across reloads.
+        cursor_row is always set, so show_cursor doubles as a guard: when False,
+        the cursor is hidden and any action on the pointed row is suppressed.
+
         Reconciles ``_selected_ids`` and ``_auto_acked_ids`` against the
         new dataset, then schedules the next refresh.
 
@@ -330,11 +337,11 @@ class IncidentsScreen(Screen):
         """
         table = self.query_one("#incidents-table", DataTable)
 
-        # capture the incident that the row cursor is pointing to
-        cursor_row = table.cursor_row
-        cursor_id = self._incident_ids[cursor_row] if self._incident_ids else None
+        # capture the incident that the row cursor is pointing to.
+        # invariant: show_cursor implies _incident_ids is populated
+        cursor_id = self._incident_ids[table.cursor_row] if table.show_cursor else None
 
-        # rebuild columns to reset widths
+        # rebuild columns to reset widths. This also reset the table.
         self._rebuild_columns()
         self._incident_ids = []
         self._incidents_cache = {}
@@ -356,6 +363,9 @@ class IncidentsScreen(Screen):
                 table.move_cursor(row=table.get_row_index(cursor_id), scroll=True)
             except Exception:
                 pass
+        else:
+            # Cursor incident no longer exists, or there was no prior cursor.
+            table.show_cursor = False
 
         # update status bar
         self.query_one("#status-bar", StatusBar).set_status(
@@ -368,6 +378,24 @@ class IncidentsScreen(Screen):
             self._do_auto_ack(incs)
 
     # -- event handlers --
+
+    def on_key(self, event: events.Key) -> None:
+        """Re-enable the cursor on navigation keys when it was hidden."""
+        if event.key in _NAV_KEYS:
+            table = self.query_one("#incidents-table", DataTable)
+            if not table.show_cursor and self._incident_ids:
+                table.show_cursor = True
+
+    @on(events.Click, "#incidents-table")
+    def on_incidents_table_click(self, event: events.Click) -> None:
+        """Re-enable the cursor when the user clicks a row while it is hidden."""
+        table = self.query_one("#incidents-table", DataTable)
+        if table.show_cursor or not self._incident_ids:
+            return
+        row_index = event.style.meta.get("row", -1)
+        if 0 <= row_index < len(self._incident_ids):
+            table.show_cursor = True
+            table.move_cursor(row=row_index, scroll=True)
 
     @on(StatusBar.ScopeChanged)
     def _on_scope_changed(self, event: StatusBar.ScopeChanged) -> None:
@@ -463,7 +491,7 @@ class IncidentsScreen(Screen):
         """Toggle selection on the row under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
         row_idx = table.cursor_row
-        if self._incident_ids:
+        if table.show_cursor:
             inc_id = self._incident_ids[row_idx]
             if inc_id in self._selected_ids:
                 self._selected_ids.discard(inc_id)
@@ -494,9 +522,8 @@ class IncidentsScreen(Screen):
     def action_inspect(self) -> None:
         """Open the detail screen for the incident under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if self._incident_ids:
-            inc_id = self._incident_ids[row_idx]
+        if table.show_cursor:
+            inc_id = self._incident_ids[table.cursor_row]
             inc = self._incidents_cache.get(inc_id)
             if inc is not None:
                 self.app.push_screen(IncidentDetailScreen(inc))
@@ -504,9 +531,8 @@ class IncidentsScreen(Screen):
     def action_open_url(self) -> None:
         """Open the PagerDuty web URL of the incident under the cursor."""
         table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if self._incident_ids:
-            inc = self._incidents_cache.get(self._incident_ids[row_idx])
+        if table.show_cursor:
+            inc = self._incidents_cache.get(self._incident_ids[table.cursor_row])
             if inc:
                 url = inc.get("html_url", "")
                 if url:
@@ -524,9 +550,8 @@ class IncidentsScreen(Screen):
         if self._selected_ids:
             return [self._incidents_cache[i] for i in self._selected_ids]
         table = self.query_one("#incidents-table", DataTable)
-        row_idx = table.cursor_row
-        if self._incident_ids:
-            inc_id = self._incident_ids[row_idx]
+        if table.show_cursor:
+            inc_id = self._incident_ids[table.cursor_row]
             return [self._incidents_cache[inc_id]]
         return []
 
