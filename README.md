@@ -85,7 +85,7 @@ pdh-ng [-c FILE] [-d]
 
 | Key | Action |
 |-----|--------|
-| `enter` | Open incident detail |
+| `i` | Open incident detail |
 | `o` | Open incident URL in browser |
 | `a` | Acknowledge selected incident(s) |
 | `r` | Resolve selected incident(s) |
@@ -100,7 +100,7 @@ pdh-ng [-c FILE] [-d]
 | `f` | Toggle title filter input (prefix term with `!` to exclude) |
 | `c` | Select visible columns |
 
-**Misc**
+**Other**
 | Key | Action |
 |-----|--------|
 | `q` | Quit |
