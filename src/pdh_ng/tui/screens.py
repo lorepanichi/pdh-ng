@@ -121,6 +121,7 @@ class IncidentsScreen(Screen):
         Binding("4", "cycle_auto_ack", "auto-ack toggle", show=False),
         Binding("5", "cycle_refresh", "refresh interval", show=False),
         Binding("i", "inspect", "Inspect"),
+        Binding("y", "yank_title", "Yank title"),
         Binding("o", "open_url", "↗"),
         Binding("a", "ack_selected", "Ack"),
         Binding("r", "resolve_selected", "Resolve"),
@@ -527,6 +528,15 @@ class IncidentsScreen(Screen):
             inc = self._incidents_cache.get(inc_id)
             if inc is not None:
                 self.app.push_screen(IncidentDetailScreen(inc))
+
+    def action_yank_title(self) -> None:
+        """Copy the title of the incident under the cursor to the clipboard."""
+        table = self.query_one("#incidents-table", DataTable)
+        if table.show_cursor:
+            inc = self._incidents_cache.get(self._incident_ids[table.cursor_row])
+            if inc:
+                self.app.copy_to_clipboard(inc.get("title", ""))
+                self.notify("Title copied")
 
     def action_open_url(self) -> None:
         """Open the PagerDuty web URL of the incident under the cursor."""

@@ -54,7 +54,7 @@ class TuiApp(App):
             format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
         if log_level > logging.DEBUG:
-            logging.getLogger("httpx").setLevel(logging.WARNING)
+            logging.getLogger("httpx2").setLevel(logging.WARNING)
 
     def _load_prefs(self) -> dict:
         """Load UI preferences from the YAML prefs file.
