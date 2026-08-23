@@ -38,3 +38,8 @@ Thumbs.db
 
 # locals
 .ideas.md
+
+# tokensave
+.tokensave
+.mcp.json
+.claude/rules/tokensave.md

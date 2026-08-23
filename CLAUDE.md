@@ -45,5 +45,5 @@ Prefs are passed to `IncidentsScreen.__init__` by `TuiApp.on_mount`. The screen 
 
 ## Dependencies
 
-- `pagerduty` 6.x switched from requests to httpx — `response.ok` is gone, use `response.is_success`.
+- `pagerduty` 6.x switched from requests to httpx (`response.ok` is gone, use `response.is_success`); 7.x switched again to `httpx2` (the Pydantic-maintained httpx successor) — its logger name is `"httpx2"`, not `"httpx"`.
 - Textual 8.x, `rich>=14.2.0`. `StatusBar` buttons are plain `Button()` with no `compact`/`flat`/`variant` kwargs — styled via TCSS only.

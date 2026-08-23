@@ -528,6 +528,45 @@ class TestIncidentsScreenInspect:
                     mock_push.assert_not_called()
 
 
+class TestIncidentsScreenYankTitle:
+    """Tests for the yank-title action (copy to clipboard)."""
+
+    async def test_copies_title_for_cursor_row(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
+                with patch.object(pilot.app, "copy_to_clipboard") as mock_copy:
+                    screen.action_yank_title()
+                    await pilot.pause()
+                    mock_copy.assert_called_once_with(_SAMPLE_INC["title"])
+
+    async def test_does_nothing_when_cursor_hidden(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {"I1": _SAMPLE_INC}
+                with patch.object(pilot.app, "copy_to_clipboard") as mock_copy:
+                    screen.action_yank_title()
+                    await pilot.pause()
+                    mock_copy.assert_not_called()
+
+    async def test_does_nothing_when_incident_missing_from_cache(self):
+        with patch.object(IncidentsScreen, "load_incidents"):
+            async with _IncidentsApp().run_test() as pilot:
+                screen = pilot.app.query_one(IncidentsScreen)
+                screen._incident_ids = ["I1"]
+                screen._incidents_cache = {}
+                screen.query_one("#incidents-table", DataTable).show_cursor = True
+                with patch.object(pilot.app, "copy_to_clipboard") as mock_copy:
+                    screen.action_yank_title()
+                    await pilot.pause()
+                    mock_copy.assert_not_called()
+
+
 class TestIncidentsScreenToggleSelect:
     """Tests for row selection toggle and bulk-clear via escape."""
 

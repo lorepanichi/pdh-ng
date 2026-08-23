@@ -86,6 +86,7 @@ pdh-ng [-c FILE] [-d]
 | Key | Action |
 |-----|--------|
 | `i` | Open incident detail |
+| `y` | Copy incident title to clipboard |
 | `o` | Open incident URL in browser |
 | `a` | Acknowledge selected incident(s) |
 | `r` | Resolve selected incident(s) |
